@@ -26,7 +26,7 @@ The card's real size is known, so the car is shown at true scale. At 1:64 it's 6
 
 | State | What you see |
 |---|---|
-| **Looking for the card** | Camera view with a yellow card-shaped frame and "Apuntá la cámara al dorso de tu tarjeta". Below it, "Ver el auto sin la tarjeta" shows the car in 3D without the card. |
+| **Looking for the card** | Camera view with a yellow card-shaped frame and "Apuntá la cámara al dorso de tu tarjeta". The car's name chip and ⓘ stay hidden until the camera recognizes the card. Below it, "Ver el auto sin la tarjeta" shows the car in 3D without the card. |
 | **On the card** (default) | The car stands on the card with the rotation ring around it. Drag sideways to rotate it. Top: ✕, the title chip, ⓘ. Bottom: **Escala**, the rotate hint, **Cámara**. |
 | **Info (ⓘ)** | The customization chips (Techo, Carrocería, Decorado, Luces) with lines that point to those parts of the car as it moves. |
 | **Escalas** | The glass sheet with 1:12 … 1:87 and the length in cm. The car on the card changes size live. **Ubicar a 1:43** places it on a table with the phone's own AR (see below). |

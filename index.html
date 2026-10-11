@@ -159,7 +159,7 @@
       position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
       padding: calc(84px + var(--safe-t)) 16px calc(96px + var(--safe-b)); pointer-events: none;
     }
-    body.vista-tarjeta:not(.auto-visible):not(.hoja-abierta):not(.modo-info) .escaneo { display: flex; }
+    body.vista-tarjeta:not(.auto-visible):not(.hoja-abierta) .escaneo { display: flex; }
     .marco { position: relative; width: min(72vw, 420px, calc((100vh - 230px) * 1.55)); aspect-ratio: 1.55; }
     .marco i { position: absolute; width: 20%; height: 31%; border: 3px solid var(--amarillo); filter: drop-shadow(0 1px 3px rgba(0,0,0,.4)); }
     .marco i:nth-child(1) { left: 0; top: 0; border-right: 0; border-bottom: 0; border-top-left-radius: 16px; }
@@ -283,6 +283,9 @@
     body.hoja-abierta :is(.ayuda, .accion.escala-accion, .accion.camara-accion) { display: none; }
 
     body.vista-tarjeta:not(.auto-visible) .ayuda { display: none; }
+    /* El nombre del auto y su personalización aparecen recién cuando la cámara reconoce la tarjeta */
+    .titulo, #info, .chips, .lineas { transition: opacity .3s, visibility .3s; }
+    body.vista-tarjeta:not(.auto-visible) :is(.titulo, #info, .chips, .lineas) { opacity: 0; visibility: hidden; }
     body.en-ar #anillo { display: none; }
 
     /* Celular vertical: la ayuda sube para no chocar con los botones */
