@@ -48,9 +48,12 @@
     button { font: inherit; color: inherit; border: 0; background: none; padding: 0; cursor: pointer; pointer-events: auto; }
     button:focus-visible { outline: 2px solid var(--amarillo); outline-offset: 3px; }
 
-    /* ---------- Capas: cámara → anillo → visor 3D ---------- */
+    /* ---------- Capas: cámara → tarjeta AR → anillo → visor 3D → interfaz ---------- */
     #camara { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; display: none; }
     body.con-camara #camara { display: block; }
+    #ar-tarjeta { position: fixed; inset: 0; z-index: 1; overflow: hidden; touch-action: none; }
+    body.vista-libre #ar-tarjeta { pointer-events: none; }
+    body.vista-libre #ar-tarjeta canvas, body.vista-libre #ar-tarjeta > div { visibility: hidden; }
     #anillo { position: fixed; left: 0; top: 0; z-index: 1; pointer-events: none; display: none; overflow: visible; }
     #anillo.listo { display: block; }
     model-viewer {
@@ -58,6 +61,9 @@
       background: transparent; --poster-color: transparent;
       --min-hotspot-opacity: 1;
     }
+    body.vista-tarjeta model-viewer { visibility: hidden; pointer-events: none; }
+    body.vista-tarjeta #anillo, body.vista-tarjeta #camara { display: none; }
+    #interfaz { position: fixed; inset: 0; z-index: 3; pointer-events: none; }
     .sombra-sup { position: absolute; left: 0; right: 0; top: 0; height: 120px; background: linear-gradient(rgba(0,0,0,.5), rgba(0,0,0,0)); pointer-events: none; }
     .carga { position: absolute; top: 0; left: 0; height: 3px; width: 0; background: var(--amarillo); transition: width .2s, opacity .4s; }
 
@@ -143,9 +149,41 @@
     .chip span { display: block; font-size: 11px; line-height: 14px; margin-top: 2px; color: #FAFAFA; }
     .chip span.cursiva { font-style: italic; }
     .lineas line { stroke: var(--chip); stroke-width: 2; }
+    .lineas circle { fill: var(--chip); stroke: #fff; stroke-width: 1.5; }
     .punto { position: relative; width: 0; height: 0; pointer-events: none; }
     .punto::after { content: ""; position: absolute; left: -5px; top: -5px; width: 10px; height: 10px; border-radius: 50%; background: var(--chip); border: 1.5px solid #fff; box-sizing: border-box; }
     .rastreador { position: relative; width: 0; height: 0; pointer-events: none; }
+
+    /* ---------- Buscando la tarjeta ---------- */
+    .escaneo {
+      position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+      padding: calc(84px + var(--safe-t)) 16px calc(96px + var(--safe-b)); pointer-events: none;
+    }
+    body.vista-tarjeta:not(.auto-visible):not(.hoja-abierta):not(.modo-info) .escaneo { display: flex; }
+    .marco { position: relative; width: min(72vw, 420px, calc((100vh - 230px) * 1.55)); aspect-ratio: 1.55; }
+    .marco i { position: absolute; width: 20%; height: 31%; border: 3px solid var(--amarillo); filter: drop-shadow(0 1px 3px rgba(0,0,0,.4)); }
+    .marco i:nth-child(1) { left: 0; top: 0; border-right: 0; border-bottom: 0; border-top-left-radius: 16px; }
+    .marco i:nth-child(2) { right: 0; top: 0; border-left: 0; border-bottom: 0; border-top-right-radius: 16px; }
+    .marco i:nth-child(3) { right: 0; bottom: 0; border-left: 0; border-top: 0; border-bottom-right-radius: 16px; }
+    .marco i:nth-child(4) { left: 0; bottom: 0; border-right: 0; border-top: 0; border-bottom-left-radius: 16px; }
+    .marco::after {
+      content: ""; position: absolute; inset: 7% 5%; border-radius: 10px;
+      background: linear-gradient(transparent 45%, rgba(255,213,90,.45) 50%, transparent 55%) 0 0 / 100% 220%;
+      animation: barrido 2.4s ease-in-out infinite alternate;
+    }
+    @keyframes barrido { from { background-position: 0 100%; } to { background-position: 0 0; } }
+    .escaneo-texto {
+      margin: 0; padding: 8px 14px; border-radius: 100px; background: var(--navy); border: 1px solid #fff;
+      font-size: 12px; font-weight: 600; text-align: center; max-width: calc(100vw - 32px);
+    }
+    .sin-tarjeta { font-size: 12px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; padding: 6px 10px; text-shadow: 0 1px 3px rgba(0,0,0,.7); }
+    .a-tarjeta {
+      position: absolute; left: 50%; transform: translateX(-50%); top: calc(76px + var(--safe-t));
+      display: none; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 100px; white-space: nowrap;
+      background: linear-gradient(160deg, var(--azul), var(--navy-2)); box-shadow: var(--sombra); font-size: 12px; font-weight: 700;
+    }
+    .a-tarjeta svg { width: 16px; height: 16px; }
+    body.vista-libre.tarjeta-disponible:not(.modo-info):not(.modo-camara):not(.hoja-abierta) .a-tarjeta { display: flex; }
 
     /* ---------- Hoja de escalas ---------- */
     .hoja-titulo {
@@ -188,12 +226,12 @@
     }
     .opcion.sel .largo { left: 3px; bottom: 0; }
     .ubicar {
-      position: absolute; right: var(--lado); top: 8px; display: none; align-items: center; gap: 6px;
+      position: absolute; right: var(--lado); top: 8px; z-index: 2; display: none; align-items: center; gap: 6px;
       padding: 6px 12px; border-radius: 100px; font-size: 12px; font-weight: 800; color: var(--navy);
       background: linear-gradient(var(--amarillo), var(--amarillo-claro)); box-shadow: var(--sombra);
     }
     .ubicar svg { width: 15px; height: 15px; }
-    model-viewer.puede-ar .ubicar { display: flex; }
+    body.puede-ar .ubicar { display: flex; }
 
     /* ---------- Visor de fotos ---------- */
     .visor-foto {
@@ -215,7 +253,7 @@
       font-size: 12px; line-height: 1.35; pointer-events: auto;
     }
     .qr-escritorio .qr { flex: none; background: #fff; padding: 5px; border-radius: 6px; line-height: 0; }
-    body.escritorio model-viewer:not(.modo-info):not(.modo-camara):not(.hoja-abierta) .qr-escritorio { display: flex; }
+    body.escritorio.vista-libre:not(.modo-info):not(.modo-camara):not(.hoja-abierta) .qr-escritorio { display: flex; }
 
     /* ---------- Avisos ---------- */
     .aviso {
@@ -231,21 +269,20 @@
 
     /* ---------- Estados (qué se ve en cada modo) ---------- */
     .chips, .lineas, .hoja-titulo, .galeria, .disparador { display: none; }
-    model-viewer.modo-info .chips, model-viewer.modo-info .lineas { display: block; }
-    model-viewer.modo-info :is(.accion.escala-accion, .accion.camara-accion) { display: none; }
-    model-viewer.modo-info #info { box-shadow: 0 0 0 3px rgba(255,213,90,.55), var(--sombra); }
-    model-viewer:not(.modo-info) .punto::after { display: none; }
+    body.modo-info .chips, body.modo-info .lineas { display: block; }
+    body.modo-info :is(.accion.escala-accion, .accion.camara-accion) { display: none; }
+    body.modo-info #info { box-shadow: 0 0 0 3px rgba(255,213,90,.55), var(--sombra); }
+    body:not(.modo-info) .punto::after { display: none; }
 
-    model-viewer.modo-camara :is(.titulo, #info, .ayuda, .accion.escala-accion, .accion.camara-accion) { display: none; }
-    model-viewer.modo-camara .galeria { display: flex; }
-    model-viewer.modo-camara .disparador { display: grid; }
+    body.modo-camara :is(.titulo, #info, .ayuda, .accion.escala-accion, .accion.camara-accion) { display: none; }
+    body.modo-camara .galeria { display: flex; }
+    body.modo-camara .disparador { display: grid; }
 
-    model-viewer.hoja-abierta .hoja { transform: translateY(0); }
-    model-viewer.hoja-abierta .hoja-titulo { display: block; }
-    model-viewer.hoja-abierta :is(.ayuda, .accion.escala-accion, .accion.camara-accion) { display: none; }
+    body.hoja-abierta .hoja { transform: translateY(0); }
+    body.hoja-abierta .hoja-titulo { display: block; }
+    body.hoja-abierta :is(.ayuda, .accion.escala-accion, .accion.camara-accion) { display: none; }
 
-    /* Sesión de AR dentro del navegador (WebXR): model-viewer muestra su propia interfaz */
-    model-viewer[ar-status="session-started"] > :not([slot]) { display: none !important; }
+    body.vista-tarjeta:not(.auto-visible) .ayuda { display: none; }
     body.en-ar #anillo { display: none; }
 
     /* Celular vertical: la ayuda sube para no chocar con los botones */
@@ -253,11 +290,14 @@
       .ayuda { bottom: calc(92px + var(--safe-b)); }
       .titulo { max-width: calc(100vw - 2 * var(--lado) - 110px); padding: 8px 12px; }
     }
-    @media (prefers-reduced-motion: reduce) { .hoja, .aviso, .flash { transition: none; } }
+    @media (prefers-reduced-motion: reduce) { .hoja, .aviso, .flash { transition: none; } .marco::after { animation: none; } }
   </style>
 </head>
 <body>
   <video id="camara" playsinline muted autoplay></video>
+
+  <!-- Seguimiento de la tarjeta (MindAR): acá van el video de la cámara y el auto sobre la tarjeta -->
+  <div id="ar-tarjeta"></div>
 
   <svg id="anillo" viewBox="0 0 608 131" preserveAspectRatio="none" aria-hidden="true">
     <ellipse cx="304" cy="65.5" rx="286" ry="64" fill="none" stroke="#FFFFFF" stroke-width="2" vector-effect="non-scaling-stroke"/>
@@ -265,9 +305,11 @@
     <path d="M608 63 L580 51 L580 75 Z" fill="#FFD659"/>
   </svg>
 
+  <!-- Visor 3D sin tarjeta (y el que abre la realidad aumentada sobre la mesa) -->
   <model-viewer
     id="visor"
     alt="Modelo 3D del auto de la tarjeta Kilómetro 48"
+    loading="eager"
     ar
     ar-modes="webxr quick-look scene-viewer"
     ar-scale="fixed"
@@ -283,14 +325,24 @@
     shadow-softness="0.6"
     exposure="1.05"
     environment-image="neutral">
-
     <span slot="ar-button" hidden></span>
     <div class="carga" slot="progress-bar" id="carga"></div>
+  </model-viewer>
+
+  <div id="interfaz">
     <div class="sombra-sup"></div>
+    <div class="carga" id="carga-tarjeta"></div>
 
     <!-- Personalización -->
     <svg class="lineas" id="lineas"></svg>
     <div class="chips" id="chips"></div>
+
+    <!-- Buscando la tarjeta -->
+    <div class="escaneo" id="escaneo">
+      <div class="marco" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+      <p class="escaneo-texto" id="escaneo-texto" role="status">Preparando la cámara…</p>
+      <button class="sin-tarjeta" id="sin-tarjeta">Ver el auto sin la tarjeta</button>
+    </div>
 
     <!-- Arriba -->
     <div class="arriba">
@@ -305,9 +357,13 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
       </button>
     </div>
+    <button class="a-tarjeta dorado" id="a-tarjeta">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 15h4"/><path d="M14 9h4v4h-4z"/></svg>
+      Ver sobre la tarjeta
+    </button>
     <div class="qr-escritorio" id="qr-escritorio">
       <div class="qr" id="qr"></div>
-      <span>Abrí esta página en tu celular para ver el auto sobre tu mesa con la cámara.</span>
+      <span>Abrí esta página en tu celular y apuntá la cámara a tu tarjeta para ver el auto encima.</span>
     </div>
 
     <!-- Abajo -->
@@ -364,21 +420,26 @@
 
     <div class="aviso" id="aviso" role="status"></div>
     <div class="error" id="error"><p id="error-texto"></p></div>
-  </model-viewer>
+  </div>
 
   <script>
   (() => {
+    const body = document.body;
     const mv = document.getElementById('visor');
     const $ = id => document.getElementById(id);
     const AUTOS = window.KM48_AUTOS || {};
     const ESCALAS = window.KM48_ESCALAS || ['1:43'];
+    const TARJETA = Object.assign({ ancho: 0.09 }, window.KM48_TARJETA || {});
+    const LIB = 'lib/';
     const fmt = new Intl.NumberFormat('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
     const params = new URLSearchParams(location.search);
     const ua = navigator.userAgent;
-    const esMovil = /Android|iPhone|iPad|iPod/i.test(ua) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(ua));
+    const esIOS = /iPhone|iPad|iPod/i.test(ua) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(ua));
     const esAndroid = /Android/i.test(ua);
+    const esMovil = esIOS || esAndroid || /Mobi/i.test(ua);
     const editar = params.has('editar');
-    if (!esMovil) document.body.classList.add('escritorio');
+    const pedirVista = params.get('vista'); // "tarjeta" o "libre" (para probar)
+    if (!esMovil) body.classList.add('escritorio');
 
     // ---------- Auto elegido por el QR (?auto=025) ----------
     let id = (params.get('auto') || window.KM48_AUTO_POR_DEFECTO || Object.keys(AUTOS)[0] || '').trim();
@@ -394,16 +455,29 @@
     $('nombre').textContent = auto.nombre;
     $('datos').innerHTML = `<b>Nº ${auto.numero}</b> · ${auto.creador}`;
     document.title = `${auto.nombre} · KM48 AR`;
-    if (auto.orbitaInicial) mv.cameraOrbit = auto.orbitaInicial;
-    if (window.KM48_FONDO) document.body.style.backgroundImage = `url("${window.KM48_FONDO}")`;
+    if (auto.orbitaInicial) mv.setAttribute('camera-orbit', auto.orbitaInicial);
+    if (window.KM48_FONDO) body.style.backgroundImage = `url("${window.KM48_FONDO}")`;
 
-    // ---------- Modelo (con respaldo de prueba) ----------
+    // ¿Arranca sobre la tarjeta? En el celular, si el auto tiene archivo de tarjeta.
+    const hayTarjeta = !!auto.tarjeta;
+    const usarTarjeta = hayTarjeta && !editar && (pedirVista === 'tarjeta' || (esMovil && pedirVista !== 'libre'));
+    if (hayTarjeta && (esMovil || pedirVista === 'tarjeta')) body.classList.add('tarjeta-disponible');
+
+    let vista = 'libre';
+    function marcarVista(v) {
+      vista = v;
+      body.classList.toggle('vista-tarjeta', v === 'tarjeta');
+      body.classList.toggle('vista-libre', v === 'libre');
+      if (modo === 'info') dibujarLineas();
+    }
+
+    // ---------- Modelo del visor sin tarjeta (con respaldo de prueba) ----------
     let usandoDemo = false;
-    mv.src = auto.modelo;
+    function cargarVisor() { if (!mv.getAttribute('src')) mv.setAttribute('src', auto.modelo); }
     mv.addEventListener('error', () => {
       if (!usandoDemo && auto.modeloDemo) {
         usandoDemo = true;
-        mv.src = auto.modeloDemo;
+        mv.setAttribute('src', auto.modeloDemo);
         setTimeout(() => avisar('Modelo de prueba: subí tu .glb a la carpeta models'), 900);
       } else {
         mostrarError(`No se pudo cargar el modelo 3D (${auto.modelo}). Revisá que el archivo .glb esté en la carpeta models.`);
@@ -442,6 +516,7 @@
     function dosCuadros(fn) { requestAnimationFrame(() => requestAnimationFrame(fn)); }
     function centroDe(el) { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }
     function medirAnillo() {
+      if (vista !== 'libre' || !mv.getCameraOrbit) return;
       const xs = [0, 1, 2, 3].map(i => mv.querySelector(`[slot="hotspot-esquina${i}"]`)).filter(Boolean).map(el => centroDe(el).x);
       if (xs.length < 4) return;
       medidaAnillo = { ancho: (Math.max(...xs) - Math.min(...xs)) * 1.12, radio: mv.getCameraOrbit().radius };
@@ -483,14 +558,19 @@
         chip.style.left = `${x}px`; chip.style.top = `${y}px`;
       });
     }
+    function posicionPunto(i) { return vista === 'tarjeta' ? proyectar(i) : centroDe(chips[i].punto); }
     function dibujarLineas() {
       const svg = $('lineas');
       svg.setAttribute('viewBox', `0 0 ${innerWidth} ${innerHeight}`);
-      svg.innerHTML = chips.map(({ chip, punto }) => {
-        const r = chip.getBoundingClientRect(), p = centroDe(punto);
+      if (vista === 'tarjeta' && !encontrado) { svg.innerHTML = ''; return; }
+      svg.innerHTML = chips.map(({ chip }, i) => {
+        const p = posicionPunto(i);
+        if (!p) return '';
+        const r = chip.getBoundingClientRect();
         const x1 = p.x > r.left + r.width / 2 ? r.right : r.left;
         const y1 = r.top + r.height / 2;
-        return `<line x1="${x1}" y1="${y1}" x2="${p.x}" y2="${p.y}"/>`;
+        const punto = vista === 'tarjeta' ? `<circle cx="${p.x}" cy="${p.y}" r="4.25"/>` : '';
+        return `<line x1="${x1}" y1="${y1}" x2="${p.x}" y2="${p.y}"/>${punto}`;
       }).join('');
     }
     let animLineas = null;
@@ -500,8 +580,8 @@
     let modo = 'normal';
     function ponerModo(m) {
       modo = m;
-      mv.classList.toggle('modo-info', m === 'info');
-      mv.classList.toggle('modo-camara', m === 'camara');
+      body.classList.toggle('modo-info', m === 'info');
+      body.classList.toggle('modo-camara', m === 'camara');
       $('info').setAttribute('aria-pressed', String(m === 'info'));
       cancelAnimationFrame(animLineas);
       if (m === 'info') { ubicarChips(); seguirLineas(); }
@@ -514,42 +594,43 @@
     // La X vuelve un paso atrás: cierra la hoja, la foto o el modo; si no, sale de la página.
     const puedeSalir = history.length > 1 || !!window.KM48_SITIO;
     function actualizarCerrar() {
-      const algoAbierto = modo !== 'normal' || mv.classList.contains('hoja-abierta');
-      document.body.classList.toggle('salida-oculta', !algoAbierto && !puedeSalir);
+      const algoAbierto = modo !== 'normal' || body.classList.contains('hoja-abierta');
+      body.classList.toggle('salida-oculta', !algoAbierto && !puedeSalir);
     }
     $('cerrar').addEventListener('click', () => {
-      if (mv.classList.contains('hoja-abierta')) return cerrarHoja();
+      if (body.classList.contains('hoja-abierta')) return cerrarHoja();
       if (modo !== 'normal') return ponerModo('normal');
       if (history.length > 1) history.back(); else if (window.KM48_SITIO) location.href = window.KM48_SITIO;
     });
     actualizarCerrar();
 
-    // ---------- Cámara del celular de fondo ----------
-    let stream = null;
+    // ---------- Cámara de fondo para la vista sin tarjeta ----------
+    let stream = null, camaraDenegada = false;
     async function prenderCamara() {
-      if (!esMovil || stream || !navigator.mediaDevices?.getUserMedia) return;
+      if (!esMovil || stream || camaraDenegada || body.classList.contains('en-ar') || videoTarjetaVivo() || !navigator.mediaDevices?.getUserMedia) return;
       try {
         stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } } });
+        if (vista !== 'libre' || body.classList.contains('en-ar')) { apagarCamara(); return; }
         const v = $('camara');
         v.srcObject = stream;
         await v.play().catch(() => {});
-        document.body.classList.add('con-camara');
-      } catch (_) {
+        body.classList.add('con-camara');
+      } catch (e) {
         stream = null;
+        if (e && e.name === 'NotAllowedError') camaraDenegada = true;
         avisar('Permití el uso de la cámara para ver el auto sobre tu mesa.');
       }
     }
     function apagarCamara() {
       if (stream) stream.getTracks().forEach(t => t.stop());
       stream = null;
-      document.body.classList.remove('con-camara');
+      body.classList.remove('con-camara');
     }
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') { restaurarEscala(); prenderCamara(); }
-    });
 
     // ---------- Escalas ----------
-    let escala = ESCALAS.includes(auto.escalaInicial) ? auto.escalaInicial : ESCALAS[Math.floor(ESCALAS.length / 2)];
+    // Sobre la tarjeta arranca más chico (1:64 entra en la tarjeta); sin tarjeta, con escalaInicial.
+    const escalaPedida = usarTarjeta ? (auto.escalaTarjeta || '1:64') : auto.escalaInicial;
+    let escala = ESCALAS.includes(escalaPedida) ? escalaPedida : ESCALAS[Math.floor(ESCALAS.length / 2)];
     let largoBase = null;
     const divisor = e => Number(e.split(':')[1]);
     const largoEn = e => auto.largoReal / divisor(e);
@@ -560,6 +641,7 @@
       $('abrir-escalas').textContent = e;
       $('ubicar-texto').textContent = `Ubicar a ${e}`;
       document.querySelectorAll('.opcion').forEach(o => o.classList.toggle('sel', o.dataset.escala === e));
+      aplicarEscala3D(true);
     }
     const carrusel = $('carrusel');
     ESCALAS.forEach(e => {
@@ -588,7 +670,7 @@
 
     const hoja = $('hoja');
     function abrirHoja() {
-      mv.classList.add('hoja-abierta');
+      body.classList.add('hoja-abierta');
       hoja.setAttribute('aria-hidden', 'false');
       $('abrir-escalas').setAttribute('aria-expanded', 'true');
       const sel = carrusel.querySelector('.opcion.sel');
@@ -596,7 +678,7 @@
       actualizarCerrar();
     }
     function cerrarHoja() {
-      mv.classList.remove('hoja-abierta');
+      body.classList.remove('hoja-abierta');
       hoja.setAttribute('aria-hidden', 'true');
       $('abrir-escalas').setAttribute('aria-expanded', 'false');
       hoja.style.transform = '';
@@ -616,37 +698,369 @@
       if (dy > 50) cerrarHoja(); else hoja.style.transform = '';
     });
 
-    // ---------- Ubicar a escala real (AR nativo) ----------
-    let visorGoogle = false;
+    // ---------- Ubicar sobre la mesa a escala real (AR del celular) ----------
+    let visorGoogle = false, volverA = null, inicioAR = 0;
     async function revisarSoporte() {
       if (esAndroid) {
         let webxr = false;
         try { webxr = !!(navigator.xr && await navigator.xr.isSessionSupported('immersive-ar')); } catch (_) {}
         if (!webxr) { visorGoogle = true; mv.arScale = 'auto'; }
       }
-      mv.classList.toggle('puede-ar', mv.canActivateAR);
+      body.classList.toggle('puede-ar', !!mv.canActivateAR);
       if (!esMovil && window.QRCode && !$('qr').hasChildNodes()) {
         new QRCode($('qr'), { text: location.href, width: 72, height: 72, colorDark: '#0D0F59', colorLight: '#FFFFFF', correctLevel: QRCode.CorrectLevel.M });
       }
     }
-    function restaurarEscala() {
-      if (mv.scale !== '1 1 1') { mv.scale = '1 1 1'; }
-      document.body.classList.remove('en-ar');
-    }
-    $('ubicar').addEventListener('click', () => {
+    function restaurarEscala() { if (mv.getAttribute('scale') && mv.getAttribute('scale') !== '1 1 1') mv.setAttribute('scale', '1 1 1'); }
+    $('ubicar').addEventListener('click', async () => {
       if (!largoBase) return;
       const s = largoEn(escala) / largoBase;
+      volverA = vista;
+      cerrarHoja();
+      detenerTarjeta();          // el AR del celular necesita la cámara libre
       apagarCamara();
-      document.body.classList.add('en-ar');
-      mv.scale = `${s} ${s} ${s}`;
+      marcarVista('libre');
+      body.classList.add('en-ar');
+      inicioAR = Date.now();
+      mv.setAttribute('scale', `${s} ${s} ${s}`);
       if (visorGoogle) avisar('Se abre el visor de Google: ajustá el tamaño con dos dedos.');
-      mv.activateAR();
+      try { await mv.activateAR(); } catch (_) {}
+      // Quick Look (iPhone) y el visor de Google ya tomaron el modelo: el visor vuelve a tamaño normal.
+      if (esIOS || visorGoogle) setTimeout(restaurarEscala, 800);
     });
+    function alVolverDeAR() {
+      if (!body.classList.contains('en-ar')) return;
+      body.classList.remove('en-ar');
+      restaurarEscala();
+      const v = volverA; volverA = null;
+      if (v === 'tarjeta') entrarTarjeta(); else prenderCamara();
+    }
     mv.addEventListener('ar-status', e => {
       const s = e.detail.status;
-      if (s === 'failed') { avisar('No se pudo abrir la realidad aumentada en este celular.'); restaurarEscala(); prenderCamara(); }
-      if (s === 'not-presenting') { restaurarEscala(); prenderCamara(); }
+      if (s === 'failed') { avisar('No se pudo abrir la realidad aumentada en este celular.'); alVolverDeAR(); }
+      if (s === 'not-presenting') alVolverDeAR();
     });
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible') return;
+      if (body.classList.contains('en-ar')) return alVolverDeAR();
+      if (vista === 'tarjeta' && videoTarjetaVivo()) mindar.video.play().catch(() => {});
+      if (vista === 'libre') prenderCamara();
+    });
+    addEventListener('focus', () => { if (esIOS && body.classList.contains('en-ar') && Date.now() - inicioAR > 1500) alVolverDeAR(); });
+
+    // ======================================================================
+    //  AUTO SOBRE LA TARJETA (MindAR: reconoce el dorso impreso con la cámara)
+    // ======================================================================
+    let mindar = null, T = null;
+    let raiz, giro, escalador, modeloGrupo, anilloGrupo, largoModelo = 1;
+    const puntos3d = [];
+    let encontrado = false, tPerdido = null, procesando = false;
+    let escalaActual = 0, escalaObjetivo = 0, popT = 1, ultimoCuadro = 0;
+    let preparando = null, entrando = null;
+
+    function cargarScript(src) {
+      return new Promise((ok, ko) => {
+        const s = document.createElement('script');
+        s.src = src; s.onload = ok; s.onerror = () => ko(new Error(`No se pudo cargar ${src}`));
+        document.head.appendChild(s);
+      });
+    }
+    function progresoTarjeta(p) {
+      const c = $('carga-tarjeta');
+      c.style.width = `${Math.round(p * 100)}%`;
+      c.style.opacity = p >= 1 ? 0 : 1;
+    }
+    function videoTarjetaVivo() {
+      const v = mindar && mindar.video;
+      return !!(v && v.isConnected && v.srcObject && v.srcObject.getTracks().some(t => t.readyState === 'live'));
+    }
+    function estadoEscaneo(e) {
+      $('escaneo-texto').textContent = e === 'preparando' ? 'Preparando la cámara…' : 'Apuntá la cámara al dorso de tu tarjeta';
+    }
+
+    function prepararTarjeta() {
+      if (!preparando) preparando = construirTarjeta().catch(e => { preparando = null; throw e; });
+      return preparando;
+    }
+    async function construirTarjeta() {
+      progresoTarjeta(.05);
+      // El archivo de la tarjeta se descarga primero: si falta, se avisa enseguida.
+      const r = await fetch(auto.tarjeta);
+      if (!r.ok) throw new Error(`No se encontró ${auto.tarjeta}`);
+      const urlObjetivo = URL.createObjectURL(await r.blob());
+      progresoTarjeta(.2);
+      await cargarScript(LIB + 'mindar-image-three.prod.js');
+      T = window.MINDAR.IMAGE.THREE;
+      window.THREE = T;
+      await cargarScript(LIB + 'GLTFLoader.js');
+      await cargarScript(LIB + 'RoomEnvironment.js');
+      progresoTarjeta(.45);
+
+      mindar = new window.MINDAR.IMAGE.MindARThree({
+        container: $('ar-tarjeta'), imageTargetSrc: urlObjetivo, maxTrack: 1,
+        uiLoading: 'no', uiScanning: 'no', uiError: 'no',
+        filterMinCF: 0.0001, filterBeta: 1000, warmupTolerance: 3, missTolerance: 8
+      });
+      const { renderer, scene } = mindar;
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.toneMapping = T.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.05;
+      renderer.physicallyCorrectLights = true;
+      const pmrem = new T.PMREMGenerator(renderer);
+      scene.environment = pmrem.fromScene(new T.RoomEnvironment(), 0.04).texture;
+      scene.add(new T.HemisphereLight(0xffffff, 0x3a3f7a, 0.5));
+
+      // Jerarquía: tarjeta → raíz (de pie sobre la tarjeta) → giro (el usuario lo rota) → escala → modelo
+      raiz = new T.Group();
+      raiz.rotation.x = Math.PI / 2;           // el "arriba" del auto apunta hacia afuera de la tarjeta
+      giro = new T.Group();
+      giro.rotation.y = (auto.giroTarjeta ?? -30) * Math.PI / 180;
+      escalador = new T.Group();
+      modeloGrupo = new T.Group();
+      raiz.add(giro); giro.add(escalador); escalador.add(modeloGrupo);
+      anilloGrupo = crearAnillo();
+      raiz.add(anilloGrupo);
+
+      // Un ancla por cada versión de la tarjeta que haya en el archivo .mind
+      for (let i = 0; i < 8; i++) {
+        const a = mindar.addAnchor(i);
+        a.onTargetFound = () => { a.group.add(raiz); alEncontrar(); };
+        a.onTargetLost = alPerder;
+      }
+      await cargarModelo3D();
+      progresoTarjeta(1);
+    }
+
+    function cargarModelo3D() {
+      return new Promise((ok, ko) => {
+        new T.GLTFLoader().load(auto.modelo, gltf => {
+          const m = gltf.scene;
+          if (auto.color) m.traverse(o => {
+            if (!o.isMesh) return;
+            [].concat(o.material).forEach(mat => {
+              if (mat && mat.name === 'Pintura') { mat.color.set(auto.color); mat.color.convertSRGBToLinear(); }
+            });
+          });
+          const caja = new T.Box3().setFromObject(m);
+          const tam = caja.getSize(new T.Vector3());
+          largoModelo = Math.max(tam.x, tam.z) || 1;
+          modeloGrupo.position.set(-(caja.min.x + caja.max.x) / 2, -caja.min.y, -(caja.min.z + caja.max.z) / 2);
+          modeloGrupo.add(m);
+          // Puntos de personalización, en las mismas coordenadas que usa el visor sin tarjeta
+          (auto.personalizacion || []).forEach(p => {
+            const o = new T.Object3D();
+            const [x, y, z] = String(p.punto || '0 0 0').trim().split(/\s+/).map(Number);
+            o.position.set(x || 0, y || 0, z || 0);
+            modeloGrupo.add(o);
+            puntos3d.push(o);
+          });
+          escalador.add(crearSombra(tam.x * 1.25, tam.z * 1.55));
+          aplicarEscala3D(false);
+          ok();
+        }, x => { if (x.total) progresoTarjeta(.45 + .5 * x.loaded / x.total); }, ko);
+      });
+    }
+
+    function crearSombra(ancho, fondo) {
+      const c = document.createElement('canvas'); c.width = c.height = 128;
+      const g = c.getContext('2d');
+      const grad = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+      grad.addColorStop(0, 'rgba(0,0,0,.75)'); grad.addColorStop(.55, 'rgba(0,0,0,.4)'); grad.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = grad; g.fillRect(0, 0, 128, 128);
+      const mat = new T.MeshBasicMaterial({ map: new T.CanvasTexture(c), transparent: true, depthWrite: false });
+      const s = new T.Mesh(new T.PlaneGeometry(ancho, fondo), mat);
+      s.rotation.x = -Math.PI / 2;
+      s.position.y = 0.004;
+      s.renderOrder = 1;
+      return s;
+    }
+
+    // Anillo de rotación del mockup, apoyado en la tarjeta (radio 1 = se escala con el auto)
+    function crearAnillo() {
+      const g = new T.Group();
+      const blanco = new T.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: .92, side: T.DoubleSide, depthWrite: false });
+      const amarillo = new T.MeshBasicMaterial({ color: 0xFFD659, side: T.DoubleSide, depthWrite: false, transparent: true });
+      const aro = new T.Mesh(new T.RingGeometry(0.986, 1, 160), blanco);
+      aro.rotation.x = -Math.PI / 2;
+      g.add(aro);
+      [-1, 1].forEach(lado => {
+        const f = new T.Shape();
+        f.moveTo(lado * 1.063, 0); f.lineTo(lado * 0.965, 0.042); f.lineTo(lado * 0.965, -0.042); f.closePath();
+        const flecha = new T.Mesh(new T.ShapeGeometry(f), amarillo);
+        flecha.rotation.x = -Math.PI / 2;
+        g.add(flecha);
+      });
+      g.position.y = 0.002;
+      g.renderOrder = 2;
+      return g;
+    }
+
+    function aplicarEscala3D(animar) {
+      if (!escalador) return;
+      // Largo del auto a esta escala, medido en "anchos de tarjeta" (la tarjeta mide 1 de ancho)
+      escalaObjetivo = (largoEn(escala) / TARJETA.ancho) / largoModelo;
+      if (!animar || !escalaActual) escalaActual = escalaObjetivo;
+    }
+
+    const easeOutBack = t => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); };
+    function cuadro() {
+      const ahora = performance.now();
+      const dt = Math.min(64, ahora - (ultimoCuadro || ahora));
+      ultimoCuadro = ahora;
+      if (!arrastre && Math.abs(velocidad) > 1e-5) { giro.rotation.y += velocidad * dt; velocidad *= Math.pow(0.9, dt / 16); }
+      escalaActual += (escalaObjetivo - escalaActual) * (1 - Math.pow(0.78, dt / 16));
+      popT = Math.min(1, popT + dt / 340);
+      const pop = 0.55 + 0.45 * easeOutBack(popT);
+      escalador.scale.setScalar(escalaActual * pop);
+      anilloGrupo.scale.setScalar(escalaActual * largoModelo * 0.62 * pop);
+      mindar.renderer.render(mindar.scene, mindar.camera);
+    }
+
+    function alEncontrar() {
+      if (!procesando) return;   // llegó tarde, después de pausar
+      const yaVisible = body.classList.contains('auto-visible');
+      encontrado = true;
+      clearTimeout(tPerdido);
+      if (!yaVisible) popT = 0;
+      body.classList.add('auto-visible');
+    }
+    function alPerder() {
+      encontrado = false;
+      clearTimeout(tPerdido);
+      tPerdido = setTimeout(() => { if (!encontrado) body.classList.remove('auto-visible'); }, 500);
+    }
+
+    // Girar el auto deslizando el dedo (con un poco de inercia)
+    const capa = $('ar-tarjeta');
+    let arrastre = null, velocidad = 0;
+    capa.addEventListener('pointerdown', e => {
+      if (vista !== 'tarjeta' || !giro) return;
+      arrastre = { x: e.clientX, t: performance.now(), id: e.pointerId };
+      velocidad = 0;
+      try { capa.setPointerCapture(e.pointerId); } catch (_) {}
+    });
+    capa.addEventListener('pointermove', e => {
+      if (!arrastre || e.pointerId !== arrastre.id) return;
+      const ahora = performance.now(), d = (e.clientX - arrastre.x) * 0.011;
+      giro.rotation.y += d;
+      velocidad = d / Math.max(8, ahora - arrastre.t);
+      arrastre.x = e.clientX; arrastre.t = ahora;
+    });
+    const soltar = () => { if (arrastre && performance.now() - arrastre.t > 90) velocidad = 0; arrastre = null; };
+    capa.addEventListener('pointerup', soltar);
+    capa.addEventListener('pointercancel', soltar);
+
+    let vTmp = null;
+    function proyectar(i) {
+      const o = puntos3d[i];
+      if (!o || !encontrado || !mindar) return null;
+      vTmp = vTmp || new T.Vector3();
+      o.getWorldPosition(vTmp).project(mindar.camera);
+      if (vTmp.z > 1) return null;
+      const r = mindar.renderer.domElement.getBoundingClientRect();
+      return { x: r.left + (vTmp.x + 1) / 2 * r.width, y: r.top + (1 - vTmp.y) / 2 * r.height };
+    }
+
+    async function arrancarMindar() {
+      try {
+        await mindar.start();
+      } catch (_) {
+        if (mindar.video) {
+          try { mindar.video.srcObject && mindar.video.srcObject.getTracks().forEach(t => t.stop()); } catch (__) {}
+          mindar.video.remove();
+        }
+        camaraDenegada = true;
+        const err = new Error('Sin cámara'); err.sinCamara = true; throw err;
+      }
+      procesando = true;
+      vigilarControlador();
+      mindar.renderer.setAnimationLoop(cuadro);
+    }
+    // MindAR no avisa cuándo termina de procesar el último cuadro después de pausar.
+    // Se espera a ese cuadro antes de reanudar, para no tener dos procesos a la vez.
+    let finLoop = null, loopTerminado = null;
+    function vigilarControlador() {
+      const c = mindar.controller;
+      if (!c || c.__km48) return;
+      c.__km48 = true;
+      const original = c.onUpdate;
+      c.onUpdate = d => {
+        if (d.type === 'processDone') {
+          if (!c.processingVideo && finLoop) { const f = finLoop; finLoop = null; dosCuadros(() => setTimeout(f, 30)); }
+          return;
+        }
+        if (!procesando) return;   // resultados que llegan después de pausar
+        original(d);
+      };
+    }
+    async function reanudarProceso() {
+      if (!mindar || procesando || !videoTarjetaVivo()) return;
+      if (loopTerminado) { await loopTerminado; loopTerminado = null; }
+      if (vista !== 'tarjeta' || procesando || !videoTarjetaVivo()) return;
+      mindar.anchors.forEach(a => { a.visible = false; a.group.visible = false; });
+      procesando = true;
+      vigilarControlador();
+      mindar.controller.processVideo(mindar.video);
+      mindar.video.play().catch(() => {});
+      mindar.renderer.setAnimationLoop(cuadro);
+    }
+    function pausarProceso() {
+      if (!mindar) return;
+      if (procesando && mindar.controller) {
+        mindar.controller.stopProcessVideo();
+        loopTerminado = new Promise(ok => { finLoop = ok; setTimeout(ok, 3000); });
+      }
+      procesando = false;
+      mindar.renderer.setAnimationLoop(null);
+      mindar.anchors.forEach(a => { a.visible = false; a.group.visible = false; });
+      encontrado = false;
+      clearTimeout(tPerdido);
+      body.classList.remove('auto-visible');
+    }
+    function detenerTarjeta() {
+      if (!mindar) return;
+      pausarProceso();
+      if (videoTarjetaVivo()) mindar.stop();
+    }
+
+    function entrarTarjeta() {
+      body.classList.remove('en-ar');
+      volverA = null;
+      restaurarEscala();
+      apagarCamara();
+      marcarVista('tarjeta');
+      if (entrando) return entrando;
+      estadoEscaneo(mindar && videoTarjetaVivo() ? 'buscando' : 'preparando');
+      entrando = (async () => {
+        try {
+          await prepararTarjeta();
+          if (videoTarjetaVivo()) await reanudarProceso(); else await arrancarMindar();
+          if (vista !== 'tarjeta') pausarProceso();
+          estadoEscaneo('buscando');
+        } catch (e) {
+          console.warn('Tarjeta AR:', e);
+          progresoTarjeta(1);
+          avisar(e && e.sinCamara
+            ? 'Permití el uso de la cámara para ver el auto sobre tu tarjeta.'
+            : 'No pudimos activar el seguimiento de la tarjeta. Te mostramos el auto en 3D.');
+          verSinTarjeta();
+        } finally {
+          entrando = null;
+          cargarVisor();   // el visor sin tarjeta se carga después, para no competir con la tarjeta
+        }
+      })();
+      return entrando;
+    }
+    function verSinTarjeta() {
+      pausarProceso();
+      marcarVista('libre');
+      cargarVisor();
+      prenderCamara();
+      dosCuadros(medirAnillo);
+      if (modo === 'info') ubicarChips();
+    }
+    $('sin-tarjeta').addEventListener('click', verSinTarjeta);
+    $('a-tarjeta').addEventListener('click', entrarTarjeta);
 
     // ---------- Fotos ----------
     const fotos = [];
@@ -656,6 +1070,10 @@
       const k = Math.max(W / fw, H / fh), sw = W / k, sh = H / k;
       ctx.drawImage(fuente, (fw - sw) / 2, (fh - sh) / 2, sw, sh, 0, 0, W, H);
     }
+    function dibujarComoEnPantalla(ctx, el, k) {
+      const r = el.getBoundingClientRect();
+      ctx.drawImage(el, r.left * k, r.top * k, r.width * k, r.height * k);
+    }
     $('disparador').addEventListener('click', async () => {
       const flash = $('flash');
       flash.classList.add('on'); requestAnimationFrame(() => requestAnimationFrame(() => flash.classList.remove('on')));
@@ -663,18 +1081,27 @@
         const dpr = Math.min(devicePixelRatio || 1, 2);
         let W = Math.round(innerWidth * dpr), H = Math.round(innerHeight * dpr);
         const lim = 2400 / Math.max(W, H); if (lim < 1) { W = Math.round(W * lim); H = Math.round(H * lim); }
+        const k = W / innerWidth;
         const c = document.createElement('canvas'); c.width = W; c.height = H;
         const ctx = c.getContext('2d');
         const v = $('camara');
-        if (stream && v.videoWidth) dibujarCubriendo(ctx, v, v.videoWidth, v.videoHeight, W, H);
+        if (videoTarjetaVivo() && mindar.video.videoWidth) dibujarComoEnPantalla(ctx, mindar.video, k);
+        else if (stream && v.videoWidth) dibujarCubriendo(ctx, v, v.videoWidth, v.videoHeight, W, H);
         else if (fondoImg && fondoImg.naturalWidth) dibujarCubriendo(ctx, fondoImg, fondoImg.naturalWidth, fondoImg.naturalHeight, W, H);
         else {
           const g = ctx.createRadialGradient(W / 2, H * .45, 0, W / 2, H * .45, Math.max(W, H) * .7);
           g.addColorStop(0, '#3B41D6'); g.addColorStop(.58, '#0D0F59'); g.addColorStop(1, '#070833');
           ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
         }
-        const auto3d = await createImageBitmap(await mv.toBlob({ mimeType: 'image/png', idealAspect: false }));
-        ctx.drawImage(auto3d, 0, 0, W, H);
+        if (vista === 'tarjeta') {
+          if (encontrado) {
+            mindar.renderer.render(mindar.scene, mindar.camera);
+            dibujarComoEnPantalla(ctx, mindar.renderer.domElement, k);
+          }
+        } else {
+          const auto3d = await createImageBitmap(await mv.toBlob({ mimeType: 'image/png', idealAspect: false }));
+          ctx.drawImage(auto3d, 0, 0, W, H);
+        }
         const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.92));
         const foto = { blob, url: URL.createObjectURL(blob), nombre: `km48-${id}-${fotos.length + 1}.jpg` };
         fotos.unshift(foto);
@@ -704,9 +1131,9 @@
       } else { descargar(f); avisar('Tu navegador no permite compartir: la guardamos.'); }
     });
 
-    // ---------- Al cargar el modelo ----------
+    // ---------- Al cargar el modelo en el visor sin tarjeta ----------
     mv.addEventListener('load', () => {
-      mv.scale = '1 1 1';
+      mv.setAttribute('scale', '1 1 1');
       if (auto.color && !usandoDemo) {
         const pintura = mv.model && mv.model.getMaterialByName && mv.model.getMaterialByName('Pintura');
         if (pintura) pintura.pbrMetallicRoughness.setBaseColorFactor(auto.color);
@@ -717,7 +1144,7 @@
         prepararAnillo();
       });
       revisarSoporte();
-      prenderCamara();
+      if (vista === 'libre') prenderCamara();
     });
 
     // ---------- Modo edición: tocá el auto para ver las coordenadas de un punto ----------
@@ -744,7 +1171,16 @@
     }
     function mostrarError(texto) { $('error-texto').textContent = texto; $('error').classList.add('visible'); }
 
+    // ---------- Para pruebas: ?debug expone el estado en la consola ----------
+    if (params.has('debug')) window.KM48_DEBUG = {
+      get mindar() { return mindar; }, get vista() { return vista; }, get encontrado() { return encontrado; },
+      get giro() { return giro; }, get escalador() { return escalador; }
+    };
+
+    // ---------- Inicio ----------
     elegirEscala(escala);
+    if (usarTarjeta) entrarTarjeta();
+    else { marcarVista('libre'); cargarVisor(); }
   })();
   </script>
 </body>

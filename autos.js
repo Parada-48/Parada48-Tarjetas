@@ -14,9 +14,16 @@
     color           (opcional) Color de la pintura, ej. "#C8140F". Pinta el material
                     "Pintura" del modelo, así el mismo SUV sirve para varias tarjetas.
     modeloDemo      (opcional) Modelo de prueba si el .glb no carga.
+    tarjeta         (opcional) Archivo .mind con el dorso impreso de la tarjeta, para que
+                    el auto aparezca parado SOBRE la tarjeta. Sin este dato, la página
+                    muestra el auto en 3D sin seguir la tarjeta.
+    giroTarjeta     (opcional) Hacia dónde mira el auto al aparecer sobre la tarjeta,
+                    en grados (0 = de perfil, -30 = trompa girada hacia quien mira).
     largoReal       Largo del auto REAL en metros. Se usa para el tamaño exacto
                     en cada escala (1:43 → largoReal / 43).
-    escalaInicial   Escala con la que abre la página.
+    escalaInicial   Escala con la que abre la página (vista sin tarjeta).
+    escalaTarjeta   (opcional) Escala con la que aparece sobre la tarjeta. Si no se pone,
+                    es "1:64" (6,9 cm: entra justo en una tarjeta de 9 cm).
     orbitaInicial   Ángulo inicial de la cámara: "giro inclinación distancia".
                     Probá valores hasta que el auto quede como en el mockup.
     personalizacion Etiquetas que aparecen al tocar el botón de info (i):
@@ -35,9 +42,12 @@ window.KM48_AUTOS = {
     numero: "25/125",
     creador: "Carlos Tolosa",
     modelo: "models/auto-025.glb",
+    tarjeta: "targets/025.mind",   // dorso de la tarjeta (las 4 versiones de color)
+    giroTarjeta: -30,
     color: "#C8140F",          // pintura de la carrocería (podés cambiarla por tarjeta)
     largoReal: 4.4,
     escalaInicial: "1:43",
+    escalaTarjeta: "1:64",
     orbitaInicial: "35deg 72deg auto",
     // Puntos ubicados sobre el modelo del SUV (baúl de techo, lateral, decal y faro).
     personalizacion: [
@@ -57,6 +67,10 @@ window.KM48_ESCALAS = ["1:12", "1:16", "1:18", "1:24", "1:43", "1:48", "1:64", "
 
 // Auto que se muestra si el link no trae ?auto=
 window.KM48_AUTO_POR_DEFECTO = "025";
+
+// Tamaño real del dorso impreso, de borde a borde, en metros (90 mm = 0.090).
+// Con este dato el auto se ve sobre la tarjeta al tamaño exacto de cada escala.
+window.KM48_TARJETA = { ancho: 0.090 };
 
 // (Opcional) Adónde lleva la X si la persona llegó directo desde el QR.
 // Ejemplo: "https://kilometro48.com.ar". Vacío = la X se oculta en ese caso.

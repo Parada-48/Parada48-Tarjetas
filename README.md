@@ -1,89 +1,95 @@
 # KM48 · Tarjeta AR
 
-The web page that opens when someone scans the QR on a Kilómetro 48 card. It follows the Figma mockup **Interfaz AR – Mockup** (Diseño TP3 TIFF): the phone's camera fills the screen, the customized car sits on top of it, and the user can rotate it, see how it was customized, take photos, choose a scale and place it on the table in real AR. No app to install: it runs in the phone's browser.
+The web page that opens when someone scans the QR on the back of a Kilómetro 48 card. The phone's camera turns on and the car from that card appears standing on top of the card. People can rotate it, see how it was customized, change its scale, take photos, and place it on a table in AR. No app needed: it runs in the phone's browser.
+
+It follows the Figma mockup **Interfaz AR – Mockup** (Diseño TP3 TIFF).
 
 ```
 km48-ar/
 ├── index.html   ← the page (design + logic)
-├── autos.js     ← car data — the only file you normally edit
-├── models/      ← the cars (auto-025.glb = SUV Flama Hot)
+├── autos.js     ← card data: the only file you normally edit
+├── models/      ← the 3D cars (auto-025.glb = SUV Flama Hot)
+├── targets/     ← the card backs the camera recognizes (025.mind)
+├── lib/         ← AR libraries (MindAR + three.js), served from your own site
 └── README.md
 ```
 
-## The screens (same as the mockup)
+## How it works
 
-| Mockup state | On the page |
+1. Each card's QR holds its own link, e.g. `https://juanpablogdesign.github.io/Parada48-Tarjetas/?auto=025`. The number picks the car in `autos.js`.
+2. The page opens the camera and looks for **the back of that card** (`targets/025.mind`).
+3. When it finds the card, the car appears standing on it and follows the card as you move the phone or the card.
+
+The card's real size is known, so the car is shown at true scale. At 1:64 it's 6.9 cm long, so it fits on the 9 cm card. At 1:43 it's 10.2 cm and sticks out past the edges.
+
+## The screens
+
+| State | What you see |
 |---|---|
-| **Default** | Live camera behind the 3D car with its rotation ring. Top: ✕, the title chip (name, Nº, creator) and ⓘ. Bottom: **Escala**, the "Deslizá sobre el auto para rotarlo" hint, and **Cámara**. Drag the car to rotate it. |
-| **Escalas** | Tapping **Escala** slides up the glass sheet. Swipe the circles (1:12 … 1:87); the selected one turns yellow and each shows its length in cm. Drag the sheet down by its handle to close it. **Ubicar a 1:43** (top-right of the sheet) opens real AR with the car at exactly that size on the table. |
-| **Info** | ⓘ shows the personalization chips (Techo, Carrocería, Decorado, Luces) with lines that follow the car as it rotates. |
-| **Cámara** | Opens photo mode: the shutter takes a photo of the camera view with the car in it, and **Galería** shows the last photo with **Compartir** and **Guardar**. ✕ goes back. |
+| **Looking for the card** | Camera view with a yellow card-shaped frame and "Apuntá la cámara al dorso de tu tarjeta". Below it, "Ver el auto sin la tarjeta" shows the car in 3D without the card. |
+| **On the card** (default) | The car stands on the card with the rotation ring around it. Drag sideways to rotate it. Top: ✕, the title chip, ⓘ. Bottom: **Escala**, the rotate hint, **Cámara**. |
+| **Info (ⓘ)** | The customization chips (Techo, Carrocería, Decorado, Luces) with lines that point to those parts of the car as it moves. |
+| **Escalas** | The glass sheet with 1:12 … 1:87 and the length in cm. The car on the card changes size live. **Ubicar a 1:43** places it on a table with the phone's own AR (see below). |
+| **Cámara** | Photo mode: the shutter saves the camera view with the car on the card. **Galería** shows the last photo with **Compartir** and **Guardar**. |
+| **Without the card** | The 3D viewer from before, over the camera view. A "Ver sobre la tarjeta" button returns to the card. Computers always open this view, with a QR to open the page on a phone. |
 
-On a computer there is no camera background: the page shows the KM48 navy (or your own image, see below) and a QR to open it on a phone.
+### "Ubicar": the car on a table at real scale
 
-### Real AR ("Ubicar a …")
+- **iPhone / iPad (Safari):** Apple's AR Quick Look, at the chosen scale.
+- **Android with ARCore + Chrome:** AR inside the page (WebXR), at the chosen scale.
+- **Older Android:** Google's Scene Viewer. The user pinches to resize it because the page can't set the scale there.
 
-- **iPhone / iPad (Safari):** opens Apple's AR Quick Look at the chosen scale, locked so it can't be resized by accident.
-- **Android with Chrome and ARCore:** AR runs inside the page (WebXR) at the chosen scale.
-- **Older Android phones:** open Google's Scene Viewer, which always loads the original file, so the page can't force the scale; the user is told to pinch to resize.
+When the user comes back from AR, the page returns to the card. On iPhone, if it doesn't, the "Ver sobre la tarjeta" button does it.
 
-The camera background, rotation, info and photos work on any phone; only "Ubicar" needs an AR-capable phone, and the button only appears when it's available.
+## Card tracking: what makes it work well
 
-## 1. The car model
+- The camera has to recognize the **printed artwork**. If the back's design changes (colors, layout, the QR), the `.mind` file has to be made again from the new design.
+- **Matte paper works best.** Glossy lamination reflects light and hides the artwork from the camera.
+- Good light and the whole card in view. Holding the phone 15–30 cm away works best.
+- `targets/025.mind` contains **the 4 color versions** of the back (blue, yellow, red, orange), so any of them works. Once you choose the final one, it can contain just that version. The file shrinks from 1.8 MB to about 0.45 MB and finds the card faster.
+- **The blue and red backs have a white QR on a dark background** (inverted). Most phones read it, but test it with a couple of iPhones and Androids before printing. The yellow and orange backs use a dark QR, which every phone reads.
 
-`models/auto-025.glb` is the SUV Flama Hot exported from 3ds Max (`autitos.glb`), prepared for the web. The geometry and textures are untouched; these things were adjusted:
+## Adding another card
 
-- **Paint:** most of the body came out as 3ds Max's black "fallback Material" (the exporter's placeholder for a material it couldn't convert). It's now a red material called **Pintura**. The page can repaint it per card with `color` in `autos.js`.
-- **Invalid values:** the roof box's glossy plastic and chrome had negative roughness (‑1.5 and ‑5), which glTF doesn't allow. They're now 0.28 and 0.18, and chrome is metallic.
-- **Finish:** rims/lights slightly metallic; tyres matte; black hood and roof less mirror-like.
-- **Position and size:** the car is turned to face forward (+X), its wheels sit on the ground, and it's 4.4 m long (it was about 2 cm in the export).
-- **Flame decals:** the exported decals were flat sheets floating 1–7 cm off the curved doors. They're rebuilt as a fine mesh projected onto the body, 4 mm above the paint, with the same artwork and mapping.
-- **Plates:** the exported plates had scrambled texture coordinates (the KM48 image came out rotated and cropped) and stood off the bumpers. They're now 40 × 18 cm plates with the image's real proportions, the front one flush above the bumper lip and the rear one inside the tailgate's plate recess.
+1. **The car:** export its `.glb` into `models/` (e.g. `models/auto-014.glb`).
+2. **The QR:** make it from `https://juanpablogdesign.github.io/Parada48-Tarjetas/?auto=014` and put it on that card's back in Figma.
+3. **The tracking file:** export the finished back (with its QR) from Figma as a PNG about 1000 px wide. Open the MindAR compiler at **hiukim.github.io/mind-ar-js-doc/tools/compile**, drop the image in, click **Start**, then **Download**. Rename the file `014.mind` and put it in `targets/`.
+4. **The data:** in `autos.js`, copy the `"025"` block, change the id to `"014"` and update the fields.
 
-For other cars exported from 3ds Max: use **Physical Material** with image textures (V-Ray/Corona/Arnold materials and procedural maps don't export), then check the .glb on modelviewer.dev/editor before uploading. From Blender: **File → Export → glTF 2.0 → glTF Binary (.glb)**.
+### Fields in `autos.js`
 
-## 2. Edit the car data (`autos.js`)
+- `nombre`, `numero`, `creador`: the title chip.
+- `modelo`: the car's `.glb`.
+- `tarjeta`: the card back's `.mind`. Without it, the page shows the car in 3D without following the card.
+- `color`: the body paint (paints the material called "Pintura").
+- `largoReal`: the real car's length in meters (4.4). It sets the cm for each scale.
+- `escalaTarjeta`: the scale it appears at on the card (default `"1:64"`).
+- `escalaInicial`: the scale for the view without the card and for "Ubicar".
+- `giroTarjeta`: which way the car faces when it appears, in degrees (`-30` = nose turned toward the viewer).
+- `orbitaInicial`: the starting angle in the view without the card.
+- `personalizacion`: the info chips. `pantalla: [x, y]` is where the chip sits on screen (0–1). `punto: "x y z"` is the part of the car the line points to. To get a new point, open the page with `?auto=025&editar=1` and tap the car.
 
-- `nombre`, `numero`, `creador` — the title chip.
-- `color` — the body paint, e.g. `"#C8140F"`.
-- `largoReal` — the real car's length in **meters**. It sets the cm shown for each scale and the AR size (4.4 m → 10,2 cm at 1:43).
-- `escalaInicial` — the scale selected at first.
-- `orbitaInicial` — the starting camera angle, e.g. `"30deg 72deg auto"` (turn, tilt, distance). Adjust the first number until the car faces like in the mockup.
-- `personalizacion` — the info chips:
-  - `titulo`, `valor` (and `cursiva: true` for italic, like "Decal Acalorado").
-  - `pantalla: [x, y]` — where the chip sits, as a fraction of the screen (the mockup positions are already set).
-  - `punto: "x y z"` — the spot on the car the line points to (already set on the roof box, the side, the flame decal and the headlight). **To change one:** open the page with `?auto=025&editar=1`, tap that part of the car and the page shows and copies the coordinates. Paste them here.
+At the bottom of the file:
 
-Optional settings at the bottom of the file:
+- `KM48_TARJETA = { ancho: 0.090 }`: the printed back's width from edge to edge, in meters. If the printed card isn't exactly 90 mm wide, change it so the scales stay exact.
+- `KM48_SITIO`: where ✕ goes if the person arrived straight from the QR.
+- `KM48_FONDO`: a background image for when there's no camera.
 
-- `KM48_SITIO` — where ✕ takes people who arrived straight from the QR (e.g. the KM48 website). Empty hides ✕ in that case.
-- `KM48_FONDO` — a background image for when there's no camera (computer, or camera permission denied). To use the desk photo from the mockup: in Figma select the **Fondo** layer, export it as JPG, save it as `img/fondo.jpg` and set `KM48_FONDO = "img/fondo.jpg"`.
+## Publishing (GitHub Pages)
 
-To add more cards, copy the car block (instructions inside the file). Each card gets its own link: `…/?auto=014`, `…/?auto=025`…
+The site is live at `https://juanpablogdesign.github.io/Parada48-Tarjetas/`. To update it, open the repository on GitHub, click **Add file → Upload files**, and drag in the changed files and folders. Drag the `lib` and `targets` **folders themselves** so they keep their names, then click **Commit changes**. It updates in 1–2 minutes.
 
-## 3. Publish it (free)
+The camera only works over **https**, so test with the published link, not by opening the file on your computer.
 
-The camera and AR only work over **https**, so the page has to be online.
+## Testing
 
-**GitHub Pages**
-1. Create a public repository called `km48-ar` on github.com.
-2. **Add file → Upload files**, drag in `index.html`, `autos.js` and the `models` folder (and `img` if you added a background), then **Commit**.
-3. **Settings → Pages → Build and deployment → Deploy from a branch → main / (root) → Save**.
-4. After a minute it's live at `https://YOUR-USER.github.io/km48-ar/`.
+- `?vista=libre`: opens the view without the card.
+- `?vista=tarjeta`: forces card tracking on a computer with a webcam (hold the card up to the camera).
+- `?debug`: exposes the AR state in the browser console.
+- Locally: `python3 -m http.server 8000` in this folder, then open `http://localhost:8000/?auto=025&vista=tarjeta`. Browsers allow the camera on `localhost`.
 
-**Netlify Drop:** drag the whole `km48-ar` folder onto app.netlify.com/drop and you get an `https://…netlify.app` link right away.
+## Credits
 
-## 4. The QR for the card
-
-Use the published link with the card's id, e.g. `https://YOUR-USER.github.io/km48-ar/?auto=025`. Make the QR from that exact link, test it with your phone, and print it at least 2 cm wide.
-
-## Testing on your computer
-
-Run `python3 -m http.server 8000` in this folder and open `http://localhost:8000`. You'll see the 3D car, the ring, the info chips, the scale sheet and photo mode (over the navy background). The camera and AR need the published https link on a phone.
-
-## Notes
-
-- The page asks for camera permission when it opens on a phone. If the user says no, everything still works over the background.
-- Photos are kept only while the page is open; **Guardar** or **Compartir** them to keep them.
-- Typeface: **Plus Jakarta Sans** (Google Fonts), as in the mockup.
-- Built with Google's [`<model-viewer>`](https://modelviewer.dev) 4.1.0, loaded from jsDelivr.
+- Card tracking: [MindAR](https://github.com/hiukim/mind-ar-js) 1.1.5 (MIT). The online compiler uses the same version. The libraries are in `lib/` (see `lib/LICENCIAS.txt`).
+- 3D viewer and table AR: Google's [`<model-viewer>`](https://modelviewer.dev) 4.1.0.
+- Typeface: Plus Jakarta Sans (Google Fonts).
