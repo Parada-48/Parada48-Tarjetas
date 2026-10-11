@@ -1,0 +1,751 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0D0F59">
+  <title>KM48 · Tarjeta AR</title>
+  <meta name="description" content="Escaneá tu tarjeta Kilómetro 48 y mirá tu auto en realidad aumentada.">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+
+  <script type="module" src="https://cdn.jsdelivr.net/npm/@google/model-viewer@4.1.0/dist/model-viewer.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
+  <script src="autos.js"></script>
+
+  <style>
+    /* Valores tomados del mockup "Interfaz AR – Mockup" (Figma, Diseño TP3 TIFF) */
+    :root {
+      color-scheme: dark;
+      --azul: #343AC7;
+      --azul-opcion: #333BC7;
+      --navy: #0D0F59;
+      --navy-2: #0C0F5A;
+      --chip: #25288E;
+      --amarillo: #FFD55A;
+      --amarillo-claro: #FFECB3;
+      --flecha: #FFD659;
+      --rojo: #C81B04;
+      --rojo-2: #4D0900;
+      --texto-claro: #FFEDB2;
+      --blanco: #FFFFFF;
+      --sombra: 0 4px 12px rgba(5, 5, 38, .35);
+      --lado: clamp(16px, 6.5vw, 64px);
+      --safe-b: env(safe-area-inset-bottom, 0px);
+      --safe-t: env(safe-area-inset-top, 0px);
+      --fuente: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    [hidden] { display: none !important; }
+    html, body { margin: 0; height: 100%; overflow: hidden; }
+    body {
+      font-family: var(--fuente); color: var(--blanco);
+      background: radial-gradient(120% 80% at 50% 45%, #3B41D6 0%, var(--navy) 58%, #070833 100%);
+      background-size: cover; background-position: center;
+    }
+    button { font: inherit; color: inherit; border: 0; background: none; padding: 0; cursor: pointer; pointer-events: auto; }
+    button:focus-visible { outline: 2px solid var(--amarillo); outline-offset: 3px; }
+
+    /* ---------- Capas: cámara → anillo → visor 3D ---------- */
+    #camara { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; display: none; }
+    body.con-camara #camara { display: block; }
+    #anillo { position: fixed; left: 0; top: 0; z-index: 1; pointer-events: none; display: none; overflow: visible; }
+    #anillo.listo { display: block; }
+    model-viewer {
+      position: fixed; inset: 0; width: 100%; height: 100%; z-index: 2;
+      background: transparent; --poster-color: transparent;
+      --min-hotspot-opacity: 1;
+    }
+    .sombra-sup { position: absolute; left: 0; right: 0; top: 0; height: 120px; background: linear-gradient(rgba(0,0,0,.5), rgba(0,0,0,0)); pointer-events: none; }
+    .carga { position: absolute; top: 0; left: 0; height: 3px; width: 0; background: var(--amarillo); transition: width .2s, opacity .4s; }
+
+    /* Borde dorado en degradé (como el stroke del mockup) */
+    .dorado { position: relative; }
+    .dorado::before {
+      content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1.5px; pointer-events: none;
+      background: linear-gradient(var(--amarillo), var(--amarillo-claro));
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor; mask-composite: exclude;
+    }
+    .boton-navy {
+      width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center;
+      background: linear-gradient(160deg, var(--azul), var(--navy-2)); box-shadow: var(--sombra);
+    }
+    .boton-navy svg { width: 20px; height: 20px; }
+
+    /* ---------- Barra superior ---------- */
+    .arriba {
+      position: absolute; top: calc(15px + var(--safe-t)); left: var(--lado); right: var(--lado);
+      display: flex; align-items: flex-start; justify-content: space-between; pointer-events: none;
+    }
+    .arriba .boton-navy { margin-top: 6px; }
+    .titulo {
+      position: absolute; left: 50%; transform: translateX(-50%); top: 0;
+      padding: 9px 17px; border-radius: 12px; max-width: calc(100vw - 2 * var(--lado) - 100px);
+      background: rgba(255,255,255,.10); box-shadow: var(--sombra);
+      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    }
+    .titulo h1 { margin: 0; font-size: 14px; font-weight: 800; letter-spacing: .03em; text-transform: uppercase; line-height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .titulo p { margin: 2px 0 0; font-size: 11px; line-height: 14px; white-space: nowrap; }
+    .titulo p b { color: var(--texto-claro); font-weight: 700; }
+    .salida-oculta #cerrar { visibility: hidden; }
+
+    /* ---------- Barra inferior ---------- */
+    .accion {
+      position: absolute; bottom: calc(15px + var(--safe-b));
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+      font-size: 11px; font-weight: 600; text-shadow: 0 1px 3px rgba(0,0,0,.45);
+    }
+    .accion.izq { left: calc(var(--lado) - 4px); }
+    .accion.der { right: calc(var(--lado) - 4px); }
+    .circulo { width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; box-shadow: var(--sombra); }
+    .circulo.escala {
+      background: linear-gradient(var(--amarillo), var(--amarillo-claro)); border: 1.5px solid #fff;
+      color: var(--navy); font-weight: 800; font-size: 13px; text-shadow: none;
+    }
+    .circulo.camara { background: linear-gradient(160deg, var(--azul), var(--navy-2)); }
+    .circulo.camara svg { width: 22px; height: 22px; }
+    .ayuda {
+      position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(32px + var(--safe-b));
+      display: flex; align-items: center; gap: 8px; white-space: nowrap; pointer-events: none;
+      padding: 8px 14px; border-radius: 100px; background: var(--navy); border: 1px solid #fff;
+      font-size: 12px; font-weight: 600;
+    }
+    .ayuda svg { width: 16px; height: 16px; flex: none; }
+
+    /* Modo cámara */
+    .galeria .miniatura {
+      width: 48px; height: 48px; border-radius: 12px; border: 2px solid #fff; overflow: hidden; box-shadow: var(--sombra);
+      background: linear-gradient(160deg, var(--azul), var(--navy-2)); display: grid; place-items: center;
+    }
+    .galeria .miniatura img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .galeria .miniatura svg { width: 20px; height: 20px; opacity: .8; }
+    .galeria span { opacity: .8; }
+    .disparador {
+      position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(15px + var(--safe-b));
+      width: 76px; height: 76px; border-radius: 50%; border: 4px solid var(--chip); display: grid; place-items: center;
+    }
+    .disparador::after { content: ""; width: 60px; height: 60px; border-radius: 50%; background: #fff; border: 2px solid var(--chip); box-sizing: border-box; transition: transform .12s; }
+    .disparador:active::after { transform: scale(.9); }
+    .flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; transition: opacity .35s; }
+    .flash.on { opacity: .85; transition: none; }
+
+    /* ---------- Personalización (botón i) ---------- */
+    .chips, .lineas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+    .chip {
+      position: absolute; transform: translate(-50%, -50%);
+      padding: 9px 17px; border-radius: 12px; text-align: center; white-space: nowrap;
+      background: var(--chip); box-shadow: var(--sombra);
+    }
+    .chip b { display: block; font-size: 14px; line-height: 18px; font-weight: 700; color: #FAFAFA; }
+    .chip span { display: block; font-size: 11px; line-height: 14px; margin-top: 2px; color: #FAFAFA; }
+    .chip span.cursiva { font-style: italic; }
+    .lineas line { stroke: var(--chip); stroke-width: 2; }
+    .punto { position: relative; width: 0; height: 0; pointer-events: none; }
+    .punto::after { content: ""; position: absolute; left: -5px; top: -5px; width: 10px; height: 10px; border-radius: 50%; background: var(--chip); border: 1.5px solid #fff; box-sizing: border-box; }
+    .rastreador { position: relative; width: 0; height: 0; pointer-events: none; }
+
+    /* ---------- Hoja de escalas ---------- */
+    .hoja-titulo {
+      position: absolute; left: 50%; transform: translateX(-50%);
+      bottom: calc(158px + var(--safe-b)); font-size: 13px; font-weight: 800; letter-spacing: .1em;
+      text-shadow: 0 1px 3px rgba(0,0,0,.45); pointer-events: none;
+    }
+    .hoja {
+      position: absolute; left: 0; right: 0; bottom: 0; padding-bottom: var(--safe-b);
+      border-radius: 22px 22px 0 0; background: rgba(255,255,255,.15);
+      backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+      box-shadow: 0 -6px 20px rgba(0,0,0,.35);
+      transform: translateY(110%); transition: transform .32s cubic-bezier(.2,.8,.2,1);
+      pointer-events: auto;
+    }
+    .hoja.dorado::before { padding: 1.5px 0 0; }
+    .asa-zona { height: 22px; display: grid; place-items: center; touch-action: none; cursor: grab; }
+    .asa { width: 40px; height: 4px; border-radius: 2px; background: #fff; }
+    .carrusel-caja { position: relative; height: 112px; }
+    .halo { position: absolute; left: 50%; top: 50%; width: 128px; height: 128px; margin: -70px 0 0 -64px; border-radius: 50%; background: rgba(255,255,255,.10); pointer-events: none; }
+    .carrusel {
+      position: relative; display: flex; gap: 20px; overflow-x: auto; scroll-snap-type: x mandatory;
+      height: 100%; align-items: center; padding: 0 calc(50% - 55px) 8px; scrollbar-width: none; touch-action: pan-x;
+    }
+    .carrusel::-webkit-scrollbar { display: none; }
+    .opcion { flex: none; width: 110px; height: 92px; scroll-snap-align: center; position: relative; display: grid; place-items: center; }
+    .opcion .disco {
+      width: 72px; height: 72px; border-radius: 50%; display: grid; place-items: center;
+      background: var(--azul-opcion); border: 1px solid #fff; font-weight: 700; font-size: 16px; color: #fff;
+      transition: width .2s, height .2s, font-size .2s;
+    }
+    .opcion.sel .disco {
+      width: 84px; height: 84px; border: 2px solid #fff; box-shadow: var(--sombra);
+      background: linear-gradient(var(--amarillo), var(--amarillo-claro)); color: var(--navy); font-weight: 800; font-size: 20px;
+    }
+    .opcion .largo {
+      position: absolute; left: 9px; bottom: 6px; padding: 4px 8px; border-radius: 100px; white-space: nowrap;
+      background: linear-gradient(var(--rojo), var(--rojo-2)); border: .75px solid #fff;
+      font-size: 10px; font-weight: 700; line-height: 13px; color: #fff;
+    }
+    .opcion.sel .largo { left: 3px; bottom: 0; }
+    .ubicar {
+      position: absolute; right: var(--lado); top: 8px; display: none; align-items: center; gap: 6px;
+      padding: 6px 12px; border-radius: 100px; font-size: 12px; font-weight: 800; color: var(--navy);
+      background: linear-gradient(var(--amarillo), var(--amarillo-claro)); box-shadow: var(--sombra);
+    }
+    .ubicar svg { width: 15px; height: 15px; }
+    model-viewer.puede-ar .ubicar { display: flex; }
+
+    /* ---------- Visor de fotos ---------- */
+    .visor-foto {
+      position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+      padding: calc(16px + var(--safe-t)) 16px calc(16px + var(--safe-b)); background: rgba(7,8,51,.92); pointer-events: auto;
+    }
+    .visor-foto.abierto { display: flex; }
+    .visor-foto img { max-width: 100%; max-height: calc(100% - 70px); border-radius: 12px; box-shadow: var(--sombra); }
+    .visor-foto .acciones { display: flex; gap: 10px; }
+    .pastilla { padding: 10px 18px; border-radius: 100px; font-weight: 800; font-size: 13px; }
+    .pastilla.amarilla { background: linear-gradient(var(--amarillo), var(--amarillo-claro)); color: var(--navy); }
+    .pastilla.navy { background: linear-gradient(160deg, var(--azul), var(--navy-2)); }
+    .visor-foto .cerrar-foto { position: absolute; top: calc(15px + var(--safe-t)); left: var(--lado); margin-top: 6px; }
+
+    /* ---------- QR en computadora ---------- */
+    .qr-escritorio {
+      position: absolute; right: var(--lado); top: calc(76px + var(--safe-t)); display: none; align-items: center; gap: 12px;
+      max-width: 280px; padding: 10px 12px; border-radius: 12px; background: var(--chip); box-shadow: var(--sombra);
+      font-size: 12px; line-height: 1.35; pointer-events: auto;
+    }
+    .qr-escritorio .qr { flex: none; background: #fff; padding: 5px; border-radius: 6px; line-height: 0; }
+    body.escritorio model-viewer:not(.modo-info):not(.modo-camara):not(.hoja-abierta) .qr-escritorio { display: flex; }
+
+    /* ---------- Avisos ---------- */
+    .aviso {
+      position: absolute; left: 50%; top: calc(80px + var(--safe-t)); transform: translate(-50%, -8px);
+      max-width: calc(100% - 32px); width: max-content; padding: 10px 14px; border-radius: 12px;
+      background: rgba(13,15,89,.92); border: 1px solid rgba(255,255,255,.25);
+      font-size: 13px; font-weight: 600; text-align: center; opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s;
+    }
+    .aviso.visible { opacity: 1; transform: translate(-50%, 0); }
+    .error { position: absolute; inset: 0; display: none; place-items: center; padding: 32px; text-align: center; background: rgba(7,8,51,.9); pointer-events: auto; }
+    .error.visible { display: grid; }
+    .error p { max-width: 340px; font-size: 14px; line-height: 1.5; }
+
+    /* ---------- Estados (qué se ve en cada modo) ---------- */
+    .chips, .lineas, .hoja-titulo, .galeria, .disparador { display: none; }
+    model-viewer.modo-info .chips, model-viewer.modo-info .lineas { display: block; }
+    model-viewer.modo-info :is(.accion.escala-accion, .accion.camara-accion) { display: none; }
+    model-viewer.modo-info #info { box-shadow: 0 0 0 3px rgba(255,213,90,.55), var(--sombra); }
+    model-viewer:not(.modo-info) .punto::after { display: none; }
+
+    model-viewer.modo-camara :is(.titulo, #info, .ayuda, .accion.escala-accion, .accion.camara-accion) { display: none; }
+    model-viewer.modo-camara .galeria { display: flex; }
+    model-viewer.modo-camara .disparador { display: grid; }
+
+    model-viewer.hoja-abierta .hoja { transform: translateY(0); }
+    model-viewer.hoja-abierta .hoja-titulo { display: block; }
+    model-viewer.hoja-abierta :is(.ayuda, .accion.escala-accion, .accion.camara-accion) { display: none; }
+
+    /* Sesión de AR dentro del navegador (WebXR): model-viewer muestra su propia interfaz */
+    model-viewer[ar-status="session-started"] > :not([slot]) { display: none !important; }
+    body.en-ar #anillo { display: none; }
+
+    /* Celular vertical: la ayuda sube para no chocar con los botones */
+    @media (orientation: portrait) {
+      .ayuda { bottom: calc(92px + var(--safe-b)); }
+      .titulo { max-width: calc(100vw - 2 * var(--lado) - 110px); padding: 8px 12px; }
+    }
+    @media (prefers-reduced-motion: reduce) { .hoja, .aviso, .flash { transition: none; } }
+  </style>
+</head>
+<body>
+  <video id="camara" playsinline muted autoplay></video>
+
+  <svg id="anillo" viewBox="0 0 608 131" preserveAspectRatio="none" aria-hidden="true">
+    <ellipse cx="304" cy="65.5" rx="286" ry="64" fill="none" stroke="#FFFFFF" stroke-width="2" vector-effect="non-scaling-stroke"/>
+    <path d="M0 63 L28 51 L28 75 Z" fill="#FFD659"/>
+    <path d="M608 63 L580 51 L580 75 Z" fill="#FFD659"/>
+  </svg>
+
+  <model-viewer
+    id="visor"
+    alt="Modelo 3D del auto de la tarjeta Kilómetro 48"
+    ar
+    ar-modes="webxr quick-look scene-viewer"
+    ar-scale="fixed"
+    ar-placement="floor"
+    xr-environment
+    camera-controls
+    disable-pan
+    touch-action="none"
+    interaction-prompt="none"
+    min-camera-orbit="auto 60deg auto"
+    max-camera-orbit="auto 82deg auto"
+    shadow-intensity="1"
+    shadow-softness="0.6"
+    exposure="1.05"
+    environment-image="neutral">
+
+    <span slot="ar-button" hidden></span>
+    <div class="carga" slot="progress-bar" id="carga"></div>
+    <div class="sombra-sup"></div>
+
+    <!-- Personalización -->
+    <svg class="lineas" id="lineas"></svg>
+    <div class="chips" id="chips"></div>
+
+    <!-- Arriba -->
+    <div class="arriba">
+      <button class="boton-navy dorado" id="cerrar" aria-label="Cerrar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
+      <div class="titulo dorado">
+        <h1 id="nombre">Cargando…</h1>
+        <p id="datos"></p>
+      </div>
+      <button class="boton-navy dorado" id="info" aria-label="Ver la personalización del auto" aria-pressed="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+      </button>
+    </div>
+    <div class="qr-escritorio" id="qr-escritorio">
+      <div class="qr" id="qr"></div>
+      <span>Abrí esta página en tu celular para ver el auto sobre tu mesa con la cámara.</span>
+    </div>
+
+    <!-- Abajo -->
+    <div class="accion izq escala-accion">
+      <button class="circulo escala" id="abrir-escalas" aria-label="Elegir escala" aria-expanded="false">1:43</button>
+      <span>Escala</span>
+    </div>
+    <div class="ayuda">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 8 4 4-4 4"/><path d="M2 12h20"/><path d="m6 8-4 4 4 4"/></svg>
+      Deslizá sobre el auto para rotarlo
+    </div>
+    <div class="accion der camara-accion">
+      <button class="circulo camara dorado" id="abrir-camara" aria-label="Abrir la cámara de fotos">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+      </button>
+      <span>Cámara</span>
+    </div>
+
+    <!-- Modo cámara -->
+    <div class="accion izq galeria">
+      <button class="miniatura" id="galeria" aria-label="Ver la última foto">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg>
+      </button>
+      <span>Galería</span>
+    </div>
+    <button class="disparador" id="disparador" aria-label="Sacar foto"></button>
+    <div class="flash" id="flash"></div>
+
+    <!-- Hoja de escalas -->
+    <div class="hoja-titulo">ESCALAS</div>
+    <section class="hoja dorado" id="hoja" role="dialog" aria-label="Elegir escala" aria-hidden="true">
+      <div class="asa-zona" id="asa"><div class="asa"></div></div>
+      <button class="ubicar" id="ubicar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+        <span id="ubicar-texto">Ubicar a 1:43</span>
+      </button>
+      <div class="carrusel-caja">
+        <div class="halo"></div>
+        <div class="carrusel" id="carrusel"></div>
+      </div>
+    </section>
+
+    <!-- Fotos -->
+    <div class="visor-foto" id="visor-foto" role="dialog" aria-label="Foto">
+      <button class="boton-navy dorado cerrar-foto" id="cerrar-foto" aria-label="Cerrar la foto">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
+      <img id="foto-grande" alt="Foto del auto">
+      <div class="acciones">
+        <button class="pastilla amarilla" id="compartir">Compartir</button>
+        <button class="pastilla navy dorado" id="guardar">Guardar</button>
+      </div>
+    </div>
+
+    <div class="aviso" id="aviso" role="status"></div>
+    <div class="error" id="error"><p id="error-texto"></p></div>
+  </model-viewer>
+
+  <script>
+  (() => {
+    const mv = document.getElementById('visor');
+    const $ = id => document.getElementById(id);
+    const AUTOS = window.KM48_AUTOS || {};
+    const ESCALAS = window.KM48_ESCALAS || ['1:43'];
+    const fmt = new Intl.NumberFormat('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    const params = new URLSearchParams(location.search);
+    const ua = navigator.userAgent;
+    const esMovil = /Android|iPhone|iPad|iPod/i.test(ua) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(ua));
+    const esAndroid = /Android/i.test(ua);
+    const editar = params.has('editar');
+    if (!esMovil) document.body.classList.add('escritorio');
+
+    // ---------- Auto elegido por el QR (?auto=025) ----------
+    let id = (params.get('auto') || window.KM48_AUTO_POR_DEFECTO || Object.keys(AUTOS)[0] || '').trim();
+    if (/^\d+$/.test(id)) id = id.padStart(3, '0');
+    let auto = AUTOS[id];
+    if (!auto) {
+      id = window.KM48_AUTO_POR_DEFECTO || Object.keys(AUTOS)[0];
+      auto = AUTOS[id];
+      if (params.get('auto')) setTimeout(() => avisar('No encontramos esa tarjeta. Te mostramos otra.'), 600);
+    }
+    if (!auto) { mostrarError('No hay autos cargados en autos.js.'); return; }
+
+    $('nombre').textContent = auto.nombre;
+    $('datos').innerHTML = `<b>Nº ${auto.numero}</b> · ${auto.creador}`;
+    document.title = `${auto.nombre} · KM48 AR`;
+    if (auto.orbitaInicial) mv.cameraOrbit = auto.orbitaInicial;
+    if (window.KM48_FONDO) document.body.style.backgroundImage = `url("${window.KM48_FONDO}")`;
+
+    // ---------- Modelo (con respaldo de prueba) ----------
+    let usandoDemo = false;
+    mv.src = auto.modelo;
+    mv.addEventListener('error', () => {
+      if (!usandoDemo && auto.modeloDemo) {
+        usandoDemo = true;
+        mv.src = auto.modeloDemo;
+        setTimeout(() => avisar('Modelo de prueba: subí tu .glb a la carpeta models'), 900);
+      } else {
+        mostrarError(`No se pudo cargar el modelo 3D (${auto.modelo}). Revisá que el archivo .glb esté en la carpeta models.`);
+      }
+    });
+    mv.addEventListener('progress', e => {
+      const p = e.detail.totalProgress;
+      $('carga').style.width = `${p * 100}%`;
+      $('carga').style.opacity = p >= 1 ? 0 : 1;
+    });
+
+    // ---------- Puntos sobre el auto: base (anillo) y personalización ----------
+    function hotspot(nombre, posicion, clase) {
+      let el = mv.querySelector(`[slot="hotspot-${nombre}"]`);
+      if (el) {
+        el.dataset.position = posicion;
+        if (mv.updateHotspot) mv.updateHotspot({ name: `hotspot-${nombre}`, position: posicion });
+        return el;
+      }
+      el = document.createElement('div');
+      el.slot = `hotspot-${nombre}`; el.className = clase;
+      el.dataset.position = posicion; el.dataset.normal = '0 1 0';
+      mv.appendChild(el);
+      return el;
+    }
+
+    let medidaAnillo = null; // { ancho, radio }
+    function prepararAnillo() {
+      const c = mv.getBoundingBoxCenter(), d = mv.getDimensions();
+      const y = c.y - d.y / 2;
+      hotspot('base', `${c.x} ${y} ${c.z}`, 'rastreador');
+      [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(([sx, sz], i) =>
+        hotspot(`esquina${i}`, `${c.x + sx * d.x / 2} ${y} ${c.z + sz * d.z / 2}`, 'rastreador'));
+      dosCuadros(medirAnillo);
+    }
+    function dosCuadros(fn) { requestAnimationFrame(() => requestAnimationFrame(fn)); }
+    function centroDe(el) { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }
+    function medirAnillo() {
+      const xs = [0, 1, 2, 3].map(i => mv.querySelector(`[slot="hotspot-esquina${i}"]`)).filter(Boolean).map(el => centroDe(el).x);
+      if (xs.length < 4) return;
+      medidaAnillo = { ancho: (Math.max(...xs) - Math.min(...xs)) * 1.12, radio: mv.getCameraOrbit().radius };
+      ubicarAnillo();
+    }
+    function ubicarAnillo() {
+      const base = mv.querySelector('[slot="hotspot-base"]');
+      if (!base || !medidaAnillo) return;
+      const p = centroDe(base);
+      const w = medidaAnillo.ancho * medidaAnillo.radio / mv.getCameraOrbit().radius;
+      const h = w * 131 / 608;
+      const a = $('anillo');
+      a.style.width = `${w}px`; a.style.height = `${h}px`;
+      a.style.transform = `translate(${p.x - w / 2}px, ${p.y - h / 2}px)`;
+      a.classList.add('listo');
+    }
+    mv.addEventListener('camera-change', () => { ubicarAnillo(); if (modo === 'info') dibujarLineas(); });
+    addEventListener('resize', () => dosCuadros(medirAnillo));
+
+    // Etiquetas de personalización
+    const chips = [];
+    (auto.personalizacion || []).forEach((p, i) => {
+      const chip = document.createElement('div');
+      chip.className = 'chip dorado';
+      chip.innerHTML = `<b></b><span class="${p.cursiva ? 'cursiva' : ''}"></span>`;
+      chip.querySelector('b').textContent = p.titulo;
+      chip.querySelector('span').textContent = p.valor;
+      $('chips').appendChild(chip);
+      chips.push({ chip, punto: hotspot(`p${i}`, p.punto, 'punto'), pantalla: p.pantalla || [i % 2 ? .8 : .2, .25 + .4 * Math.floor(i / 2)] });
+    });
+    if (!chips.length) $('info').hidden = true;
+
+    function ubicarChips() {
+      const W = innerWidth, H = innerHeight;
+      chips.forEach(({ chip, pantalla }) => {
+        const w = chip.offsetWidth, h = chip.offsetHeight;
+        const x = Math.min(Math.max(pantalla[0] * W, w / 2 + 12), W - w / 2 - 12);
+        const y = Math.min(Math.max(pantalla[1] * H, h / 2 + 70), H - h / 2 - 70);
+        chip.style.left = `${x}px`; chip.style.top = `${y}px`;
+      });
+    }
+    function dibujarLineas() {
+      const svg = $('lineas');
+      svg.setAttribute('viewBox', `0 0 ${innerWidth} ${innerHeight}`);
+      svg.innerHTML = chips.map(({ chip, punto }) => {
+        const r = chip.getBoundingClientRect(), p = centroDe(punto);
+        const x1 = p.x > r.left + r.width / 2 ? r.right : r.left;
+        const y1 = r.top + r.height / 2;
+        return `<line x1="${x1}" y1="${y1}" x2="${p.x}" y2="${p.y}"/>`;
+      }).join('');
+    }
+    let animLineas = null;
+    function seguirLineas() { dibujarLineas(); animLineas = requestAnimationFrame(seguirLineas); }
+
+    // ---------- Modos: normal, info, cámara ----------
+    let modo = 'normal';
+    function ponerModo(m) {
+      modo = m;
+      mv.classList.toggle('modo-info', m === 'info');
+      mv.classList.toggle('modo-camara', m === 'camara');
+      $('info').setAttribute('aria-pressed', String(m === 'info'));
+      cancelAnimationFrame(animLineas);
+      if (m === 'info') { ubicarChips(); seguirLineas(); }
+      actualizarCerrar();
+    }
+    $('info').addEventListener('click', () => ponerModo(modo === 'info' ? 'normal' : 'info'));
+    $('abrir-camara').addEventListener('click', () => ponerModo('camara'));
+    addEventListener('resize', () => { if (modo === 'info') ubicarChips(); });
+
+    // La X vuelve un paso atrás: cierra la hoja, la foto o el modo; si no, sale de la página.
+    const puedeSalir = history.length > 1 || !!window.KM48_SITIO;
+    function actualizarCerrar() {
+      const algoAbierto = modo !== 'normal' || mv.classList.contains('hoja-abierta');
+      document.body.classList.toggle('salida-oculta', !algoAbierto && !puedeSalir);
+    }
+    $('cerrar').addEventListener('click', () => {
+      if (mv.classList.contains('hoja-abierta')) return cerrarHoja();
+      if (modo !== 'normal') return ponerModo('normal');
+      if (history.length > 1) history.back(); else if (window.KM48_SITIO) location.href = window.KM48_SITIO;
+    });
+    actualizarCerrar();
+
+    // ---------- Cámara del celular de fondo ----------
+    let stream = null;
+    async function prenderCamara() {
+      if (!esMovil || stream || !navigator.mediaDevices?.getUserMedia) return;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } } });
+        const v = $('camara');
+        v.srcObject = stream;
+        await v.play().catch(() => {});
+        document.body.classList.add('con-camara');
+      } catch (_) {
+        stream = null;
+        avisar('Permití el uso de la cámara para ver el auto sobre tu mesa.');
+      }
+    }
+    function apagarCamara() {
+      if (stream) stream.getTracks().forEach(t => t.stop());
+      stream = null;
+      document.body.classList.remove('con-camara');
+    }
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') { restaurarEscala(); prenderCamara(); }
+    });
+
+    // ---------- Escalas ----------
+    let escala = ESCALAS.includes(auto.escalaInicial) ? auto.escalaInicial : ESCALAS[Math.floor(ESCALAS.length / 2)];
+    let largoBase = null;
+    const divisor = e => Number(e.split(':')[1]);
+    const largoEn = e => auto.largoReal / divisor(e);
+    const textoLargo = e => `${fmt.format(largoEn(e) * 100)} cm`;
+
+    function elegirEscala(e) {
+      escala = e;
+      $('abrir-escalas').textContent = e;
+      $('ubicar-texto').textContent = `Ubicar a ${e}`;
+      document.querySelectorAll('.opcion').forEach(o => o.classList.toggle('sel', o.dataset.escala === e));
+    }
+    const carrusel = $('carrusel');
+    ESCALAS.forEach(e => {
+      const b = document.createElement('button');
+      b.className = 'opcion';
+      b.dataset.escala = e;
+      b.setAttribute('aria-label', `Escala ${e}, ${textoLargo(e)} de largo`);
+      b.innerHTML = `<span class="disco">${e}</span><span class="largo">${textoLargo(e)}</span>`;
+      b.addEventListener('click', () => { centrar(b, true); elegirEscala(e); });
+      carrusel.appendChild(b);
+    });
+    function centrar(el, suave) { el.scrollIntoView({ inline: 'center', block: 'nearest', behavior: suave ? 'smooth' : 'auto' }); }
+    let finScroll;
+    carrusel.addEventListener('scroll', () => {
+      clearTimeout(finScroll);
+      finScroll = setTimeout(() => {
+        const centro = carrusel.getBoundingClientRect().left + carrusel.clientWidth / 2;
+        let mejor = null, dist = Infinity;
+        carrusel.querySelectorAll('.opcion').forEach(o => {
+          const r = o.getBoundingClientRect(), d = Math.abs(r.left + r.width / 2 - centro);
+          if (d < dist) { dist = d; mejor = o; }
+        });
+        if (mejor && mejor.dataset.escala !== escala) elegirEscala(mejor.dataset.escala);
+      }, 120);
+    }, { passive: true });
+
+    const hoja = $('hoja');
+    function abrirHoja() {
+      mv.classList.add('hoja-abierta');
+      hoja.setAttribute('aria-hidden', 'false');
+      $('abrir-escalas').setAttribute('aria-expanded', 'true');
+      const sel = carrusel.querySelector('.opcion.sel');
+      if (sel) requestAnimationFrame(() => centrar(sel, false));
+      actualizarCerrar();
+    }
+    function cerrarHoja() {
+      mv.classList.remove('hoja-abierta');
+      hoja.setAttribute('aria-hidden', 'true');
+      $('abrir-escalas').setAttribute('aria-expanded', 'false');
+      hoja.style.transform = '';
+      actualizarCerrar();
+    }
+    $('abrir-escalas').addEventListener('click', abrirHoja);
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') { cerrarHoja(); cerrarFoto(); } });
+    // Se cierra arrastrando hacia abajo desde el asa
+    let inicioY = null;
+    const asa = $('asa');
+    asa.addEventListener('pointerdown', e => { inicioY = e.clientY; hoja.style.transition = 'none'; asa.setPointerCapture(e.pointerId); });
+    asa.addEventListener('pointermove', e => { if (inicioY !== null) hoja.style.transform = `translateY(${Math.max(0, e.clientY - inicioY)}px)`; });
+    asa.addEventListener('pointerup', e => {
+      if (inicioY === null) return;
+      const dy = e.clientY - inicioY;
+      inicioY = null; hoja.style.transition = '';
+      if (dy > 50) cerrarHoja(); else hoja.style.transform = '';
+    });
+
+    // ---------- Ubicar a escala real (AR nativo) ----------
+    let visorGoogle = false;
+    async function revisarSoporte() {
+      if (esAndroid) {
+        let webxr = false;
+        try { webxr = !!(navigator.xr && await navigator.xr.isSessionSupported('immersive-ar')); } catch (_) {}
+        if (!webxr) { visorGoogle = true; mv.arScale = 'auto'; }
+      }
+      mv.classList.toggle('puede-ar', mv.canActivateAR);
+      if (!esMovil && window.QRCode && !$('qr').hasChildNodes()) {
+        new QRCode($('qr'), { text: location.href, width: 72, height: 72, colorDark: '#0D0F59', colorLight: '#FFFFFF', correctLevel: QRCode.CorrectLevel.M });
+      }
+    }
+    function restaurarEscala() {
+      if (mv.scale !== '1 1 1') { mv.scale = '1 1 1'; }
+      document.body.classList.remove('en-ar');
+    }
+    $('ubicar').addEventListener('click', () => {
+      if (!largoBase) return;
+      const s = largoEn(escala) / largoBase;
+      apagarCamara();
+      document.body.classList.add('en-ar');
+      mv.scale = `${s} ${s} ${s}`;
+      if (visorGoogle) avisar('Se abre el visor de Google: ajustá el tamaño con dos dedos.');
+      mv.activateAR();
+    });
+    mv.addEventListener('ar-status', e => {
+      const s = e.detail.status;
+      if (s === 'failed') { avisar('No se pudo abrir la realidad aumentada en este celular.'); restaurarEscala(); prenderCamara(); }
+      if (s === 'not-presenting') { restaurarEscala(); prenderCamara(); }
+    });
+
+    // ---------- Fotos ----------
+    const fotos = [];
+    let fondoImg = null;
+    if (window.KM48_FONDO) { fondoImg = new Image(); fondoImg.src = window.KM48_FONDO; }
+    function dibujarCubriendo(ctx, fuente, fw, fh, W, H) {
+      const k = Math.max(W / fw, H / fh), sw = W / k, sh = H / k;
+      ctx.drawImage(fuente, (fw - sw) / 2, (fh - sh) / 2, sw, sh, 0, 0, W, H);
+    }
+    $('disparador').addEventListener('click', async () => {
+      const flash = $('flash');
+      flash.classList.add('on'); requestAnimationFrame(() => requestAnimationFrame(() => flash.classList.remove('on')));
+      try {
+        const dpr = Math.min(devicePixelRatio || 1, 2);
+        let W = Math.round(innerWidth * dpr), H = Math.round(innerHeight * dpr);
+        const lim = 2400 / Math.max(W, H); if (lim < 1) { W = Math.round(W * lim); H = Math.round(H * lim); }
+        const c = document.createElement('canvas'); c.width = W; c.height = H;
+        const ctx = c.getContext('2d');
+        const v = $('camara');
+        if (stream && v.videoWidth) dibujarCubriendo(ctx, v, v.videoWidth, v.videoHeight, W, H);
+        else if (fondoImg && fondoImg.naturalWidth) dibujarCubriendo(ctx, fondoImg, fondoImg.naturalWidth, fondoImg.naturalHeight, W, H);
+        else {
+          const g = ctx.createRadialGradient(W / 2, H * .45, 0, W / 2, H * .45, Math.max(W, H) * .7);
+          g.addColorStop(0, '#3B41D6'); g.addColorStop(.58, '#0D0F59'); g.addColorStop(1, '#070833');
+          ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+        }
+        const auto3d = await createImageBitmap(await mv.toBlob({ mimeType: 'image/png', idealAspect: false }));
+        ctx.drawImage(auto3d, 0, 0, W, H);
+        const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.92));
+        const foto = { blob, url: URL.createObjectURL(blob), nombre: `km48-${id}-${fotos.length + 1}.jpg` };
+        fotos.unshift(foto);
+        $('galeria').innerHTML = `<img src="${foto.url}" alt="Última foto">`;
+      } catch (_) {
+        avisar('No se pudo sacar la foto.');
+      }
+    });
+    function abrirFoto() {
+      if (!fotos.length) return avisar('Todavía no sacaste fotos.');
+      $('foto-grande').src = fotos[0].url;
+      $('visor-foto').classList.add('abierto');
+    }
+    function cerrarFoto() { $('visor-foto').classList.remove('abierto'); }
+    $('galeria').addEventListener('click', abrirFoto);
+    $('cerrar-foto').addEventListener('click', cerrarFoto);
+    function descargar(f) {
+      const a = document.createElement('a'); a.href = f.url; a.download = f.nombre;
+      document.body.appendChild(a); a.click(); a.remove();
+    }
+    $('guardar').addEventListener('click', () => { descargar(fotos[0]); avisar('Foto guardada'); });
+    $('compartir').addEventListener('click', async () => {
+      const f = fotos[0];
+      const archivo = new File([f.blob], f.nombre, { type: 'image/jpeg' });
+      if (navigator.canShare && navigator.canShare({ files: [archivo] })) {
+        try { await navigator.share({ files: [archivo], title: auto.nombre }); } catch (_) {}
+      } else { descargar(f); avisar('Tu navegador no permite compartir: la guardamos.'); }
+    });
+
+    // ---------- Al cargar el modelo ----------
+    mv.addEventListener('load', () => {
+      mv.scale = '1 1 1';
+      if (auto.color && !usandoDemo) {
+        const pintura = mv.model && mv.model.getMaterialByName && mv.model.getMaterialByName('Pintura');
+        if (pintura) pintura.pbrMetallicRoughness.setBaseColorFactor(auto.color);
+      }
+      dosCuadros(() => {
+        const d = mv.getDimensions();
+        largoBase = Math.max(d.x, d.z) || 1;
+        prepararAnillo();
+      });
+      revisarSoporte();
+      prenderCamara();
+    });
+
+    // ---------- Modo edición: tocá el auto para ver las coordenadas de un punto ----------
+    if (editar) {
+      let abajo = null;
+      mv.addEventListener('pointerdown', e => { abajo = { x: e.clientX, y: e.clientY }; });
+      mv.addEventListener('pointerup', e => {
+        if (!abajo || Math.hypot(e.clientX - abajo.x, e.clientY - abajo.y) > 6) return;
+        const hit = mv.positionAndNormalFromPoint(e.clientX, e.clientY);
+        if (!hit) return;
+        const t = [hit.position.x, hit.position.y, hit.position.z].map(n => n.toFixed(2)).join(' ');
+        navigator.clipboard?.writeText(`"${t}"`).catch(() => {});
+        avisar(`punto: "${t}" (copiado)`);
+      });
+      setTimeout(() => avisar('Modo edición: tocá el auto para obtener coordenadas'), 800);
+    }
+
+    // ---------- Utilidades ----------
+    let tAviso;
+    function avisar(texto) {
+      const a = $('aviso');
+      a.textContent = texto; a.classList.add('visible');
+      clearTimeout(tAviso); tAviso = setTimeout(() => a.classList.remove('visible'), 3400);
+    }
+    function mostrarError(texto) { $('error-texto').textContent = texto; $('error').classList.add('visible'); }
+
+    elegirEscala(escala);
+  })();
+  </script>
+</body>
+</html>
