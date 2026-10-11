@@ -10,3 +10,7 @@ mindar-image-three.prod.js
 GLTFLoader.js, RoomEnvironment.js
   three.js r136, examples/js. https://github.com/mrdoob/three.js
   Licencia MIT, Copyright © 2010-2021 three.js authors.
+
+jsQR.js
+  jsQR 1.4.0 — lectura de códigos QR en el navegador. https://github.com/cozmo/jsQR
+  Licencia Apache 2.0, Copyright Cosmo Wolfe.

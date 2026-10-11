@@ -283,6 +283,8 @@
     body.hoja-abierta :is(.ayuda, .accion.escala-accion, .accion.camara-accion) { display: none; }
 
     body.vista-tarjeta:not(.auto-visible) .ayuda { display: none; }
+    /* Sin auto todavía (link general): solo la cámara buscando un QR */
+    body.sin-auto :is(.titulo, #info, .accion.escala-accion, .accion.camara-accion, .sin-tarjeta, .a-tarjeta, .ayuda) { display: none !important; }
     /* El nombre del auto y su personalización aparecen recién cuando la cámara reconoce la tarjeta */
     .titulo, #info, .chips, .lineas { transition: opacity .3s, visibility .3s; }
     body.vista-tarjeta:not(.auto-visible) :is(.titulo, #info, .chips, .lineas) { opacity: 0; visibility: hidden; }
@@ -444,27 +446,27 @@
     const pedirVista = params.get('vista'); // "tarjeta" o "libre" (para probar)
     if (!esMovil) body.classList.add('escritorio');
 
-    // ---------- Auto elegido por el QR (?auto=025) ----------
-    let id = (params.get('auto') || window.KM48_AUTO_POR_DEFECTO || Object.keys(AUTOS)[0] || '').trim();
-    if (/^\d+$/.test(id)) id = id.padStart(3, '0');
-    let auto = AUTOS[id];
-    if (!auto) {
-      id = window.KM48_AUTO_POR_DEFECTO || Object.keys(AUTOS)[0];
-      auto = AUTOS[id];
-      if (params.get('auto')) setTimeout(() => avisar('No encontramos esa tarjeta. Te mostramos otra.'), 600);
-    }
-    if (!auto) { mostrarError('No hay autos cargados en autos.js.'); return; }
-
-    $('nombre').textContent = auto.nombre;
-    $('datos').innerHTML = `<b>Nº ${auto.numero}</b> · ${auto.creador}`;
-    document.title = `${auto.nombre} · KM48 AR`;
-    if (auto.orbitaInicial) mv.setAttribute('camera-orbit', auto.orbitaInicial);
-    if (window.KM48_FONDO) body.style.backgroundImage = `url("${window.KM48_FONDO}")`;
-
-    // ¿Arranca sobre la tarjeta? En el celular, si el auto tiene archivo de tarjeta.
-    const hayTarjeta = !!auto.tarjeta;
+    // ---------- Auto elegido por el QR (?auto=014) ----------
+    // Sin ?auto= en el celular, la página espera a leer el QR de cualquier tarjeta con la cámara.
+    const OBJETIVOS = window.KM48_OBJETIVOS || '';   // dorsos de las tarjetas (una versión por color)
+    const idDe = t => { t = String(t || '').trim(); return /^\d+$/.test(t) ? t.padStart(3, '0') : t; };
+    if (!Object.keys(AUTOS).length) { mostrarError('No hay autos cargados en autos.js.'); return; }
+    let id = idDe(params.get('auto'));
+    let auto = AUTOS[id] || null;
+    const hayTarjeta = !!(OBJETIVOS || (auto && auto.tarjeta));
     const usarTarjeta = hayTarjeta && !editar && (pedirVista === 'tarjeta' || (esMovil && pedirVista !== 'libre'));
+    if (params.get('auto') && !auto) setTimeout(() => avisar(usarTarjeta ? 'No encontramos esa tarjeta. Apuntá al QR de tu tarjeta.' : 'No encontramos esa tarjeta. Te mostramos otra.'), 600);
+    if (!auto && !usarTarjeta) { id = idDe(window.KM48_AUTO_POR_DEFECTO || Object.keys(AUTOS)[0]); auto = AUTOS[id] || null; }
+    if (!auto) body.classList.add('sin-auto');
+    if (window.KM48_FONDO) body.style.backgroundImage = `url("${window.KM48_FONDO}")`;
     if (hayTarjeta && (esMovil || pedirVista === 'tarjeta')) body.classList.add('tarjeta-disponible');
+
+    function mostrarDatosAuto() {
+      $('nombre').textContent = auto.nombre;
+      $('datos').innerHTML = `<b>Nº ${auto.numero}</b> · ${auto.creador}`;
+      document.title = `${auto.nombre} · KM48 AR`;
+      if (auto.orbitaInicial) mv.setAttribute('camera-orbit', auto.orbitaInicial);
+    }
 
     let vista = 'libre';
     function marcarVista(v) {
@@ -476,6 +478,7 @@
 
     // Colores por material: "color" pinta la carrocería ("Pintura"); "colores" pinta otros materiales por nombre.
     function coloresDelAuto() {
+      if (!auto) return {};
       const c = Object.assign({}, auto.colores || {});
       if (auto.color) c.Pintura = auto.color;
       return c;
@@ -483,8 +486,13 @@
 
     // ---------- Modelo del visor sin tarjeta (con respaldo de prueba) ----------
     let usandoDemo = false;
-    function cargarVisor() { if (!mv.getAttribute('src')) mv.setAttribute('src', auto.modelo); }
+    function cargarVisor() {
+      if (!auto || mv.getAttribute('src') === auto.modelo) return;
+      usandoDemo = false; largoBase = null;
+      mv.setAttribute('src', auto.modelo);
+    }
     mv.addEventListener('error', () => {
+      if (!auto) return;
       if (!usandoDemo && auto.modeloDemo) {
         usandoDemo = true;
         mv.setAttribute('src', auto.modeloDemo);
@@ -548,16 +556,22 @@
 
     // Etiquetas de personalización
     const chips = [];
-    (auto.personalizacion || []).forEach((p, i) => {
-      const chip = document.createElement('div');
-      chip.className = 'chip dorado';
-      chip.innerHTML = `<b></b><span class="${p.cursiva ? 'cursiva' : ''}"></span>`;
-      chip.querySelector('b').textContent = p.titulo;
-      chip.querySelector('span').textContent = p.valor;
-      $('chips').appendChild(chip);
-      chips.push({ chip, punto: hotspot(`p${i}`, p.punto, 'punto'), pantalla: p.pantalla || [i % 2 ? .8 : .2, .25 + .4 * Math.floor(i / 2)] });
-    });
-    if (!chips.length) $('info').hidden = true;
+    function crearChips() {
+      chips.length = 0;
+      $('chips').innerHTML = '';
+      mv.querySelectorAll('.punto').forEach(el => el.remove());
+      ((auto && auto.personalizacion) || []).forEach((p, i) => {
+        const chip = document.createElement('div');
+        chip.className = 'chip dorado';
+        chip.innerHTML = `<b></b><span class="${p.cursiva ? 'cursiva' : ''}"></span>`;
+        chip.querySelector('b').textContent = p.titulo;
+        chip.querySelector('span').textContent = p.valor;
+        $('chips').appendChild(chip);
+        chips.push({ chip, punto: hotspot(`p${i}`, p.punto, 'punto'), pantalla: p.pantalla || [i % 2 ? .8 : .2, .25 + .4 * Math.floor(i / 2)] });
+      });
+      $('info').hidden = !chips.length;
+      if (modo === 'info') ubicarChips();
+    }
 
     function ubicarChips() {
       const W = innerWidth, H = innerHeight;
@@ -639,11 +653,11 @@
 
     // ---------- Escalas ----------
     // Sobre la tarjeta arranca más chico (1:64 entra en la tarjeta); sin tarjeta, con escalaInicial.
-    const escalaPedida = usarTarjeta ? (auto.escalaTarjeta || '1:64') : auto.escalaInicial;
-    let escala = ESCALAS.includes(escalaPedida) ? escalaPedida : ESCALAS[Math.floor(ESCALAS.length / 2)];
+    const escalaDe = a => usarTarjeta ? ((a && a.escalaTarjeta) || '1:64') : ((a && a.escalaInicial) || '1:43');
+    let escala = ESCALAS.includes(escalaDe(auto)) ? escalaDe(auto) : ESCALAS[Math.floor(ESCALAS.length / 2)];
     let largoBase = null;
     const divisor = e => Number(e.split(':')[1]);
-    const largoEn = e => auto.largoReal / divisor(e);
+    const largoEn = e => (auto ? auto.largoReal : 4.4) / divisor(e);
     const textoLargo = e => `${fmt.format(largoEn(e) * 100)} cm`;
 
     function elegirEscala(e) {
@@ -658,11 +672,17 @@
       const b = document.createElement('button');
       b.className = 'opcion';
       b.dataset.escala = e;
-      b.setAttribute('aria-label', `Escala ${e}, ${textoLargo(e)} de largo`);
-      b.innerHTML = `<span class="disco">${e}</span><span class="largo">${textoLargo(e)}</span>`;
+      b.innerHTML = `<span class="disco">${e}</span><span class="largo"></span>`;
       b.addEventListener('click', () => { centrar(b, true); elegirEscala(e); });
       carrusel.appendChild(b);
     });
+    function actualizarCarrusel() {
+      carrusel.querySelectorAll('.opcion').forEach(b => {
+        const e = b.dataset.escala;
+        b.querySelector('.largo').textContent = textoLargo(e);
+        b.setAttribute('aria-label', `Escala ${e}, ${textoLargo(e)} de largo`);
+      });
+    }
     function centrar(el, suave) { el.scrollIntoView({ inline: 'center', block: 'nearest', behavior: suave ? 'smooth' : 'auto' }); }
     let finScroll;
     carrusel.addEventListener('scroll', () => {
@@ -785,7 +805,12 @@
       return !!(v && v.isConnected && v.srcObject && v.srcObject.getTracks().some(t => t.readyState === 'live'));
     }
     function estadoEscaneo(e) {
-      $('escaneo-texto').textContent = e === 'preparando' ? 'Preparando la cámara…' : 'Apuntá la cámara al dorso de tu tarjeta';
+      $('escaneo-texto').textContent = {
+        preparando: 'Preparando la cámara…',
+        buscando: auto ? 'Apuntá la cámara al dorso de tu tarjeta' : 'Apuntá la cámara al QR de cualquier tarjeta KM48',
+        leyendo: 'Acercate un poco para leer el QR…',
+        cargando: 'Cargando el auto…'
+      }[e] || '';
     }
 
     function prepararTarjeta() {
@@ -795,8 +820,9 @@
     async function construirTarjeta() {
       progresoTarjeta(.05);
       // El archivo de la tarjeta se descarga primero: si falta, se avisa enseguida.
-      const r = await fetch(auto.tarjeta);
-      if (!r.ok) throw new Error(`No se encontró ${auto.tarjeta}`);
+      const archivo = OBJETIVOS || auto.tarjeta;
+      const r = await fetch(archivo);
+      if (!r.ok) throw new Error(`No se encontró ${archivo}`);
       const urlObjetivo = URL.createObjectURL(await r.blob());
       progresoTarjeta(.2);
       await cargarScript(LIB + 'mindar-image-three.prod.js');
@@ -804,6 +830,7 @@
       window.THREE = T;
       await cargarScript(LIB + 'GLTFLoader.js');
       await cargarScript(LIB + 'RoomEnvironment.js');
+      cargarScript(LIB + 'jsQR.js').then(iniciarLectorQR).catch(() => {});
       progresoTarjeta(.45);
 
       mindar = new window.MINDAR.IMAGE.MindARThree({
@@ -824,12 +851,13 @@
       raiz = new T.Group();
       raiz.rotation.x = Math.PI / 2;           // el "arriba" del auto apunta hacia afuera de la tarjeta
       giro = new T.Group();
-      giro.rotation.y = (auto.giroTarjeta ?? -30) * Math.PI / 180;
+      giro.rotation.y = ((auto && auto.giroTarjeta) ?? -30) * Math.PI / 180;
       escalador = new T.Group();
       modeloGrupo = new T.Group();
       raiz.add(giro); giro.add(escalador); escalador.add(modeloGrupo);
       anilloGrupo = crearAnillo();
       raiz.add(anilloGrupo);
+      raiz.visible = false;      // hasta que haya auto cargado
 
       // Un ancla por cada versión de la tarjeta que haya en el archivo .mind
       for (let i = 0; i < 8; i++) {
@@ -837,39 +865,57 @@
         a.onTargetFound = () => { a.group.add(raiz); alEncontrar(); };
         a.onTargetLost = alPerder;
       }
-      await cargarModelo3D();
       progresoTarjeta(1);
     }
 
-    function cargarModelo3D() {
-      return new Promise((ok, ko) => {
-        new T.GLTFLoader().load(auto.modelo, gltf => {
-          const m = gltf.scene;
-          const colores = coloresDelAuto();
-          m.traverse(o => {
-            if (!o.isMesh) return;
-            [].concat(o.material).forEach(mat => {
-              if (mat && colores[mat.name]) { mat.color.set(colores[mat.name]); mat.color.convertSRGBToLinear(); }
-            });
-          });
-          const caja = new T.Box3().setFromObject(m);
-          const tam = caja.getSize(new T.Vector3());
-          largoModelo = Math.max(tam.x, tam.z) || 1;
-          modeloGrupo.position.set(-(caja.min.x + caja.max.x) / 2, -caja.min.y, -(caja.min.z + caja.max.z) / 2);
-          modeloGrupo.add(m);
-          // Puntos de personalización, en las mismas coordenadas que usa el visor sin tarjeta
-          (auto.personalizacion || []).forEach(p => {
-            const o = new T.Object3D();
-            const [x, y, z] = String(p.punto || '0 0 0').trim().split(/\s+/).map(Number);
-            o.position.set(x || 0, y || 0, z || 0);
-            modeloGrupo.add(o);
-            puntos3d.push(o);
-          });
-          escalador.add(crearSombra(tam.x * 1.25, tam.z * 1.55));
-          aplicarEscala3D(false);
-          ok();
-        }, x => { if (x.total) progresoTarjeta(.45 + .5 * x.loaded / x.total); }, ko);
+    // Modelos 3D: se descargan una vez y se reutilizan al cambiar de tarjeta
+    const cacheGLB = {};
+    let modeloListo = false, pedidoModelo = 0, sombra = null;
+    function cargarGLB(ruta) {
+      if (!cacheGLB[ruta]) cacheGLB[ruta] = new Promise((ok, ko) => new T.GLTFLoader().load(ruta, g => ok(g.scene),
+        x => { if (x.total) progresoTarjeta(.2 + .75 * x.loaded / x.total); },
+        e => { delete cacheGLB[ruta]; ko(e); }));
+      return cacheGLB[ruta];
+    }
+    async function mostrarModelo3D() {
+      if (!T || !modeloGrupo || !auto) return;
+      const pedido = ++pedidoModelo, a = auto;
+      modeloListo = false; raiz.visible = false; actualizarVisibilidad();
+      progresoTarjeta(.1);
+      let m;
+      try { m = await cargarGLB(a.modelo); }
+      catch (e) { progresoTarjeta(1); if (pedido === pedidoModelo) mostrarError(`No se pudo cargar el modelo 3D (${a.modelo}).`); return; }
+      if (pedido !== pedidoModelo) return;             // cambió de tarjeta mientras cargaba
+      const colores = coloresDelAuto();
+      m.traverse(o => {
+        if (!o.isMesh) return;
+        [].concat(o.material).forEach(mat => {
+          if (mat && colores[mat.name]) { mat.color.set(colores[mat.name]); mat.color.convertSRGBToLinear(); }
+        });
       });
+      modeloGrupo.clear();
+      puntos3d.length = 0;
+      m.position.set(0, 0, 0);
+      const caja = new T.Box3().setFromObject(m);
+      const tam = caja.getSize(new T.Vector3());
+      largoModelo = Math.max(tam.x, tam.z) || 1;
+      modeloGrupo.position.set(-(caja.min.x + caja.max.x) / 2, -caja.min.y, -(caja.min.z + caja.max.z) / 2);
+      modeloGrupo.add(m);
+      // Puntos de personalización, en las mismas coordenadas que usa el visor sin tarjeta
+      (a.personalizacion || []).forEach(p => {
+        const o = new T.Object3D();
+        const [x, y, z] = String(p.punto || '0 0 0').trim().split(/\s+/).map(Number);
+        o.position.set(x || 0, y || 0, z || 0);
+        modeloGrupo.add(o);
+        puntos3d.push(o);
+      });
+      if (sombra) escalador.remove(sombra);
+      sombra = crearSombra(tam.x * 1.25, tam.z * 1.55);
+      escalador.add(sombra);
+      escalaActual = 0; aplicarEscala3D(false);
+      modeloListo = true; raiz.visible = true; popT = 0;
+      progresoTarjeta(1);
+      actualizarVisibilidad();
     }
 
     function crearSombra(ancho, fondo) {
@@ -907,7 +953,7 @@
     }
 
     function aplicarEscala3D(animar) {
-      if (!escalador) return;
+      if (!escalador || !auto) return;
       // Largo del auto a esta escala, medido en "anchos de tarjeta" (la tarjeta mide 1 de ancho)
       escalaObjetivo = (largoEn(escala) / TARJETA.ancho) / largoModelo;
       if (!animar || !escalaActual) escalaActual = escalaObjetivo;
@@ -927,18 +973,66 @@
       mindar.renderer.render(mindar.scene, mindar.camera);
     }
 
+    function actualizarVisibilidad() {
+      const visible = encontrado && modeloListo && !!auto;
+      if (visible && !body.classList.contains('auto-visible')) popT = 0;
+      body.classList.toggle('auto-visible', visible);
+      if (!visible && vista === 'tarjeta' && procesando) estadoEscaneo(!encontrado ? 'buscando' : auto ? 'cargando' : 'leyendo');
+    }
     function alEncontrar() {
       if (!procesando) return;   // llegó tarde, después de pausar
-      const yaVisible = body.classList.contains('auto-visible');
       encontrado = true;
       clearTimeout(tPerdido);
-      if (!yaVisible) popT = 0;
-      body.classList.add('auto-visible');
+      actualizarVisibilidad();
     }
     function alPerder() {
       encontrado = false;
       clearTimeout(tPerdido);
-      tPerdido = setTimeout(() => { if (!encontrado) body.classList.remove('auto-visible'); }, 500);
+      tPerdido = setTimeout(() => { if (!encontrado) actualizarVisibilidad(); }, 500);
+    }
+
+    // ---------- Lector de QR: cambia de auto al apuntar a otra tarjeta ----------
+    const lienzoQR = document.createElement('canvas');
+    const ctxQR = lienzoQR.getContext('2d', { willReadFrequently: true });
+    let lectorQR = null, cicloQR = 0, candidatoQR = { id: null, n: 0, t: 0 }, ultimoCambio = 0;
+    function iniciarLectorQR() { if (!lectorQR && window.jsQR) lectorQR = setInterval(leerQR, 450); }
+    function zonaQR() {
+      // El QR está en el centro del dorso y mide un tercio del ancho de la tarjeta
+      const a = mindar.anchors.find(x => x.group.visible);
+      if (!a) return null;
+      const v = mindar.video, vr = v.getBoundingClientRect(), cr = mindar.renderer.domElement.getBoundingClientRect();
+      const xs = [], ys = [];
+      [[-.21, -.21], [.21, -.21], [.21, .21], [-.21, .21]].forEach(([x, y]) => {
+        const p = new T.Vector3(x, y, 0).applyMatrix4(a.group.matrix).project(mindar.camera);
+        const sx = cr.left + (p.x + 1) / 2 * cr.width, sy = cr.top + (1 - p.y) / 2 * cr.height;
+        xs.push((sx - vr.left) * v.videoWidth / vr.width); ys.push((sy - vr.top) * v.videoHeight / vr.height);
+      });
+      return { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
+    }
+    function leerQR() {
+      if (vista !== 'tarjeta' || !procesando || document.hidden || !videoTarjetaVivo() || body.classList.contains('modo-camara')) return;
+      const v = mindar.video, vw = v.videoWidth, vh = v.videoHeight;
+      if (!vw) return;
+      let z = encontrado ? zonaQR() : null;
+      if (!z) { cicloQR++; z = cicloQR % 3 ? { x: vw * .18, y: vh * .12, w: vw * .64, h: vh * .76 } : { x: 0, y: 0, w: vw, h: vh }; }
+      const x = Math.max(0, z.x), y = Math.max(0, z.y), w = Math.min(vw - x, z.w), h = Math.min(vh - y, z.h);
+      if (w < 24 || h < 24) return;
+      const k = Math.min(3, Math.max(1, 480 / Math.max(w, h)));
+      const W = Math.round(w * k), H = Math.round(h * k);
+      lienzoQR.width = W; lienzoQR.height = H;
+      ctxQR.drawImage(v, x, y, w, h, 0, 0, W, H);
+      const r = window.jsQR(ctxQR.getImageData(0, 0, W, H).data, W, H, { inversionAttempts: 'attemptBoth' });
+      const m = r && r.data && r.data.match(/[?&]auto=(\d{1,3})\b/);
+      if (!m) return;
+      const nuevo = idDe(m[1]);
+      if (!AUTOS[nuevo] || nuevo === id) { candidatoQR.id = null; return; }
+      const ahora = Date.now();
+      candidatoQR = candidatoQR.id === nuevo && ahora - candidatoQR.t < 2500 ? { id: nuevo, n: candidatoQR.n + 1, t: ahora } : { id: nuevo, n: 1, t: ahora };
+      // Sin auto se cambia al primer QR; con auto, hay que leer el nuevo dos veces (por si hay dos tarjetas a la vista)
+      if (!auto || (candidatoQR.n >= 2 && ahora - ultimoCambio > 1500)) {
+        ultimoCambio = ahora; candidatoQR.id = null;
+        ponerAuto(nuevo);
+      }
     }
 
     // Girar el auto deslizando el dedo (con un poco de inercia)
@@ -1045,15 +1139,18 @@
       entrando = (async () => {
         try {
           await prepararTarjeta();
+          if (auto && !modeloListo) mostrarModelo3D();
           if (videoTarjetaVivo()) await reanudarProceso(); else await arrancarMindar();
           if (vista !== 'tarjeta') pausarProceso();
-          estadoEscaneo('buscando');
+          actualizarVisibilidad();
+          iniciarLectorQR();
         } catch (e) {
           console.warn('Tarjeta AR:', e);
           progresoTarjeta(1);
           avisar(e && e.sinCamara
             ? 'Permití el uso de la cámara para ver el auto sobre tu tarjeta.'
             : 'No pudimos activar el seguimiento de la tarjeta. Te mostramos el auto en 3D.');
+          if (!auto) ponerAuto(idDe(window.KM48_AUTO_POR_DEFECTO || Object.keys(AUTOS)[0]));
           verSinTarjeta();
         } finally {
           entrando = null;
@@ -1184,14 +1281,34 @@
     }
     function mostrarError(texto) { $('error-texto').textContent = texto; $('error').classList.add('visible'); }
 
+    // ---------- Cambiar de auto (al abrir la página o al leer el QR de otra tarjeta) ----------
+    function ponerAuto(nuevoId) {
+      const a = AUTOS[nuevoId];
+      if (!a) return;
+      const primero = !auto;
+      id = nuevoId; auto = a;
+      body.classList.remove('sin-auto');
+      mostrarDatosAuto();
+      crearChips();
+      if (primero && ESCALAS.includes(escalaDe(a))) escala = escalaDe(a);
+      actualizarCarrusel();
+      elegirEscala(escala);
+      try {
+        const q = new URLSearchParams(location.search); q.set('auto', nuevoId);
+        history.replaceState(null, '', `${location.pathname}?${q}`);
+      } catch (_) {}
+      cargarVisor();
+      if (T && modeloGrupo) mostrarModelo3D();
+    }
+
     // ---------- Para pruebas: ?debug expone el estado en la consola ----------
     if (params.has('debug')) window.KM48_DEBUG = {
       get mindar() { return mindar; }, get vista() { return vista; }, get encontrado() { return encontrado; },
-      get giro() { return giro; }, get escalador() { return escalador; }
+      get giro() { return giro; }, get escalador() { return escalador; }, get id() { return id; }
     };
 
     // ---------- Inicio ----------
-    elegirEscala(escala);
+    if (auto) ponerAuto(id); else { actualizarCarrusel(); elegirEscala(escala); }
     if (usarTarjeta) entrarTarjeta();
     else { marcarVista('libre'); cargarVisor(); }
   })();

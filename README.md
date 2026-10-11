@@ -9,7 +9,7 @@ km48-ar/
 ├── index.html   ← the page (design + logic)
 ├── autos.js     ← card data: the only file you normally edit
 ├── models/      ← the 3D cars (suv-flama-hot.glb, suv-base.glb)
-├── targets/     ← the card backs the camera recognizes (001.mind … 016.mind)
+├── targets/     ← the card backs the camera recognizes (todas.mind: one per color)
 ├── lib/         ← AR libraries (MindAR + three.js), served from your own site
 └── README.md
 ```
@@ -17,7 +17,10 @@ km48-ar/
 ## How it works
 
 1. Each card's QR holds its own link, e.g. `https://juanpablogdesign.github.io/Parada48-Tarjetas/?auto=014`. The number picks the car in `autos.js`.
-2. The page opens the camera and looks for **the back of that card** (`targets/014.mind`).
+2. The page opens the camera and looks for **the back of a KM48 card** (`targets/todas.mind` has one back of each color).
+3. While the camera is on, the page also **reads the QR** on the card. If the person points at a different card, it switches to that card's car, so several cards can be shown one after another.
+
+**One link for every card:** `https://juanpablogdesign.github.io/Parada48-Tarjetas/` (without a number). It opens the camera and waits for any card: point at a card and its car appears; point at the next one and the car changes. Handy for events or for showing all the cards with one phone.
 3. When it finds the card, the car appears standing on it and follows the card as you move the phone or the card.
 
 The card's real size is known, so the car is shown at true scale. At 1:64 it's 6.9 cm long, so it fits on the 9 cm card. At 1:43 it's 10.2 cm and sticks out past the edges.
@@ -43,11 +46,11 @@ When the user comes back from AR, the page returns to the card. On iPhone, if it
 
 ## Card tracking: what makes it work well
 
-- The camera has to recognize the **printed artwork**. If the back's design changes (colors, layout, the QR), the `.mind` file has to be made again from the new design.
+- The camera has to recognize the **printed artwork**. If the back's design changes (colors or layout), `targets/todas.mind` has to be made again from the new design. A new QR alone doesn't need it.
 - **Matte paper works best.** Glossy lamination reflects light and hides the artwork from the camera.
 - Good light and the whole card in view. Holding the phone 15–30 cm away works best.
-- The 16 printed cards (Nº 001–016) each have their own tracking file, made from that card's final back with its QR. `targets/025.mind` is the old test card (all 4 color versions).
-- Cards that share a color look the same except for the QR, so a page can also recognize another card of the same color. Pointing at the card that was scanned always works.
+- `targets/todas.mind` was made from the final backs of cards 001 (orange), 002 (blue), 004 (yellow) and 007 (red). It recognizes every card of those four colors; which car to show comes from the QR.
+- For the QR to be read, the card should fill a good part of the screen (about 15–30 cm away).
 - **The blue and red backs have a white QR on a dark background** (inverted). Most phones read it, but test it with a couple of iPhones and Androids before printing. The yellow and orange backs use a dark QR, which every phone reads.
 
 ## The 3D models
@@ -68,14 +71,13 @@ The cards' extras (stripes, decals, siren, taxi sign, roof racks) aren't in the 
 
 1. **The car:** export its `.glb` into `models/` (e.g. `models/auto-017.glb`).
 2. **The QR:** make it from `https://juanpablogdesign.github.io/Parada48-Tarjetas/?auto=014` and put it on that card's back in Figma.
-3. **The tracking file:** export the finished back (with its QR) from Figma as a PNG about 1000 px wide. Open the MindAR compiler at **hiukim.github.io/mind-ar-js-doc/tools/compile**, drop the image in, click **Start**, then **Download**. Rename the file `014.mind` and put it in `targets/`.
-4. **The data:** in `autos.js`, copy a block like `"013"`, change the id to `"017"` and update the fields.
+3. **The tracking file:** nothing to do if the new card uses one of the four existing colors. For a new back design, export one back of each color from Figma as PNGs about 1000 px wide, drop them all into the MindAR compiler at **hiukim.github.io/mind-ar-js-doc/tools/compile**, click **Start**, then **Download**, and replace `targets/todas.mind`.
+4. **The data:** in `autos.js`, copy a line like `"013"`, change the id to `"017"` and update the fields.
 
 ### Fields in `autos.js`
 
 - `nombre`, `numero`, `creador`: the title chip.
 - `modelo`: the car's `.glb`.
-- `tarjeta`: the card back's `.mind`. Without it, the page shows the car in 3D without following the card.
 - `color`: the body paint (paints the material called "Pintura").
 - `largoReal`: the real car's length in meters (4.4). It sets the cm for each scale.
 - `escalaTarjeta`: the scale it appears at on the card (default `"1:64"`).
