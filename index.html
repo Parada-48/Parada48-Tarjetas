@@ -6,6 +6,14 @@
   <meta name="theme-color" content="#0D0F59">
   <title>KM48 · Tarjeta AR</title>
   <meta name="description" content="Escaneá tu tarjeta Kilómetro 48 y mirá tu auto en realidad aumentada.">
+  <!-- Como app en la pantalla de inicio: se abre sin la barra del navegador -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" href="img/favicon.png">
+  <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="KM48 AR">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1300,6 +1308,23 @@
       cargarVisor();
       if (T && modeloGrupo) mostrarModelo3D();
     }
+
+    // ---------- Pantalla completa: en Android se oculta la barra del navegador al primer toque ----------
+    // (los navegadores solo lo permiten después de que la persona toca la pantalla; el iPhone no lo permite)
+    const raizDoc = document.documentElement;
+    const pedirPC = raizDoc.requestFullscreen || raizDoc.webkitRequestFullscreen;
+    const comoApp = matchMedia('(display-mode: fullscreen), (display-mode: standalone)').matches || navigator.standalone;
+    let salioDePC = false;
+    function pantallaCompleta() {
+      if (!esMovil || esIOS || comoApp || !pedirPC || salioDePC || body.classList.contains('en-ar')) return;
+      if (document.fullscreenElement || document.webkitFullscreenElement) return;
+      try { const r = pedirPC.call(raizDoc, { navigationUI: 'hide' }); if (r && r.catch) r.catch(() => {}); } catch (_) {}
+    }
+    document.addEventListener('pointerup', pantallaCompleta, true);
+    ['fullscreenchange', 'webkitfullscreenchange'].forEach(ev => document.addEventListener(ev, () => {
+      // Si la persona sale de la pantalla completa a propósito, no se vuelve a pedir
+      if (!document.fullscreenElement && !document.webkitFullscreenElement && !body.classList.contains('en-ar')) salioDePC = true;
+    }));
 
     // ---------- Para pruebas: ?debug expone el estado en la consola ----------
     if (params.has('debug')) window.KM48_DEBUG = {

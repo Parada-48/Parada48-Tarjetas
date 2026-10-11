@@ -44,6 +44,12 @@ The card's real size is known, so the car is shown at true scale. At 1:64 it's 6
 
 When the user comes back from AR, the page returns to the card. On iPhone, if it doesn't, the "Ver sobre la tarjeta" button does it.
 
+## Hiding the browser bar
+
+- **Android (Chrome):** the page goes fullscreen on the first tap, hiding the address bar. If the person leaves fullscreen (back gesture), it doesn't force it again.
+- **iPhone:** Safari doesn't let websites hide its bars. To use it without them, open the link in Safari, tap **Share → Add to Home Screen** and open it from the KM48 icon.
+- **As an app on any phone:** "Add to Home Screen" (iPhone) or "Install app / Add to Home screen" (Android) creates a KM48 icon that opens the general link fullscreen. Useful for the phone you'll show at an event.
+
 ## Card tracking: what makes it work well
 
 - The camera has to recognize the **printed artwork**. If the back's design changes (colors or layout), `targets/todas.mind` has to be made again from the new design. A new QR alone doesn't need it.

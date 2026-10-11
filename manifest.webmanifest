@@ -1,0 +1,17 @@
+{
+  "name": "KM48 · Tarjetas AR",
+  "short_name": "KM48 AR",
+  "description": "Apuntá la cámara a una tarjeta Kilómetro 48 y mirá su auto en realidad aumentada.",
+  "lang": "es-AR",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "any",
+  "background_color": "#0D0F59",
+  "theme_color": "#0D0F59",
+  "icons": [
+    { "src": "img/icono-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "img/icono-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
