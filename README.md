@@ -8,16 +8,16 @@ It follows the Figma mockup **Interfaz AR – Mockup** (Diseño TP3 TIFF).
 km48-ar/
 ├── index.html   ← the page (design + logic)
 ├── autos.js     ← card data: the only file you normally edit
-├── models/      ← the 3D cars (auto-025.glb = SUV Flama Hot)
-├── targets/     ← the card backs the camera recognizes (025.mind)
+├── models/      ← the 3D cars (suv-flama-hot.glb, suv-base.glb)
+├── targets/     ← the card backs the camera recognizes (001.mind … 016.mind)
 ├── lib/         ← AR libraries (MindAR + three.js), served from your own site
 └── README.md
 ```
 
 ## How it works
 
-1. Each card's QR holds its own link, e.g. `https://juanpablogdesign.github.io/Parada48-Tarjetas/?auto=025`. The number picks the car in `autos.js`.
-2. The page opens the camera and looks for **the back of that card** (`targets/025.mind`).
+1. Each card's QR holds its own link, e.g. `https://juanpablogdesign.github.io/Parada48-Tarjetas/?auto=014`. The number picks the car in `autos.js`.
+2. The page opens the camera and looks for **the back of that card** (`targets/014.mind`).
 3. When it finds the card, the car appears standing on it and follows the card as you move the phone or the card.
 
 The card's real size is known, so the car is shown at true scale. At 1:64 it's 6.9 cm long, so it fits on the 9 cm card. At 1:43 it's 10.2 cm and sticks out past the edges.
@@ -46,15 +46,20 @@ When the user comes back from AR, the page returns to the card. On iPhone, if it
 - The camera has to recognize the **printed artwork**. If the back's design changes (colors, layout, the QR), the `.mind` file has to be made again from the new design.
 - **Matte paper works best.** Glossy lamination reflects light and hides the artwork from the camera.
 - Good light and the whole card in view. Holding the phone 15–30 cm away works best.
-- `targets/025.mind` contains **the 4 color versions** of the back (blue, yellow, red, orange), so any of them works. Once you choose the final one, it can contain just that version. The file shrinks from 1.8 MB to about 0.45 MB and finds the card faster.
+- The 16 printed cards (Nº 001–016) each have their own tracking file, made from that card's final back with its QR. `targets/025.mind` is the old test card (all 4 color versions).
+- Cards that share a color look the same except for the QR, so a page can also recognize another card of the same color. Pointing at the card that was scanned always works.
 - **The blue and red backs have a white QR on a dark background** (inverted). Most phones read it, but test it with a couple of iPhones and Androids before printing. The yellow and orange backs use a dark QR, which every phone reads.
+
+## The 3D models
+
+Only the SUV exists as a 3D model so far. Card 014 (SUV Flama Hot) uses `suv-flama-hot.glb`, with its roof box and flames. The other 15 cards use `suv-base.glb`, the same SUV without the box and flames, painted each card's color. The sedán, coupé and pickup cards show this SUV until their own models are added: export each car as `.glb`, put it in `models/` and change its `modelo` in `autos.js`. The QR codes don't change, so the printed cards keep working.
 
 ## Adding another card
 
-1. **The car:** export its `.glb` into `models/` (e.g. `models/auto-014.glb`).
+1. **The car:** export its `.glb` into `models/` (e.g. `models/auto-017.glb`).
 2. **The QR:** make it from `https://juanpablogdesign.github.io/Parada48-Tarjetas/?auto=014` and put it on that card's back in Figma.
 3. **The tracking file:** export the finished back (with its QR) from Figma as a PNG about 1000 px wide. Open the MindAR compiler at **hiukim.github.io/mind-ar-js-doc/tools/compile**, drop the image in, click **Start**, then **Download**. Rename the file `014.mind` and put it in `targets/`.
-4. **The data:** in `autos.js`, copy the `"025"` block, change the id to `"014"` and update the fields.
+4. **The data:** in `autos.js`, copy a block like `"013"`, change the id to `"017"` and update the fields.
 
 ### Fields in `autos.js`
 
@@ -67,7 +72,7 @@ When the user comes back from AR, the page returns to the card. On iPhone, if it
 - `escalaInicial`: the scale for the view without the card and for "Ubicar".
 - `giroTarjeta`: which way the car faces when it appears, in degrees (`-30` = nose turned toward the viewer).
 - `orbitaInicial`: the starting angle in the view without the card.
-- `personalizacion`: the info chips. `pantalla: [x, y]` is where the chip sits on screen (0–1). `punto: "x y z"` is the part of the car the line points to. To get a new point, open the page with `?auto=025&editar=1` and tap the car.
+- `personalizacion`: the info chips. `pantalla: [x, y]` is where the chip sits on screen (0–1). `punto: "x y z"` is the part of the car the line points to. To get a new point, open the page with `?auto=014&editar=1` and tap the car.
 
 At the bottom of the file:
 
@@ -86,7 +91,7 @@ The camera only works over **https**, so test with the published link, not by op
 - `?vista=libre`: opens the view without the card.
 - `?vista=tarjeta`: forces card tracking on a computer with a webcam (hold the card up to the camera).
 - `?debug`: exposes the AR state in the browser console.
-- Locally: `python3 -m http.server 8000` in this folder, then open `http://localhost:8000/?auto=025&vista=tarjeta`. Browsers allow the camera on `localhost`.
+- Locally: `python3 -m http.server 8000` in this folder, then open `http://localhost:8000/?auto=014&vista=tarjeta`. Browsers allow the camera on `localhost`.
 
 ## Credits
 

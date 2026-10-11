@@ -1,1 +1,8 @@
-Acá van los modelos .glb de los autos. auto-025.glb es el SUV Flama Hot (exportado de 3ds Max y preparado para web).
+Modelos 3D de los autos (.glb).
+
+suv-flama-hot.glb  SUV de Carlos Tolosa (Nº 014): con baúl de techo, llamas y patentes.
+suv-base.glb       El mismo SUV sin baúl ni llamas. Lo usan las demás tarjetas, pintado
+                   del color de cada una (autos.js), hasta que se sumen sus propios modelos.
+
+Para agregar el modelo de un auto: exportalo como .glb, ponelo en esta carpeta
+y cambiá el campo "modelo" de ese auto en autos.js.

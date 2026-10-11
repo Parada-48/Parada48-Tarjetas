@@ -474,6 +474,13 @@
       if (modo === 'info') dibujarLineas();
     }
 
+    // Colores por material: "color" pinta la carrocería ("Pintura"); "colores" pinta otros materiales por nombre.
+    function coloresDelAuto() {
+      const c = Object.assign({}, auto.colores || {});
+      if (auto.color) c.Pintura = auto.color;
+      return c;
+    }
+
     // ---------- Modelo del visor sin tarjeta (con respaldo de prueba) ----------
     let usandoDemo = false;
     function cargarVisor() { if (!mv.getAttribute('src')) mv.setAttribute('src', auto.modelo); }
@@ -838,10 +845,11 @@
       return new Promise((ok, ko) => {
         new T.GLTFLoader().load(auto.modelo, gltf => {
           const m = gltf.scene;
-          if (auto.color) m.traverse(o => {
+          const colores = coloresDelAuto();
+          m.traverse(o => {
             if (!o.isMesh) return;
             [].concat(o.material).forEach(mat => {
-              if (mat && mat.name === 'Pintura') { mat.color.set(auto.color); mat.color.convertSRGBToLinear(); }
+              if (mat && colores[mat.name]) { mat.color.set(colores[mat.name]); mat.color.convertSRGBToLinear(); }
             });
           });
           const caja = new T.Box3().setFromObject(m);
@@ -1137,9 +1145,11 @@
     // ---------- Al cargar el modelo en el visor sin tarjeta ----------
     mv.addEventListener('load', () => {
       mv.setAttribute('scale', '1 1 1');
-      if (auto.color && !usandoDemo) {
-        const pintura = mv.model && mv.model.getMaterialByName && mv.model.getMaterialByName('Pintura');
-        if (pintura) pintura.pbrMetallicRoughness.setBaseColorFactor(auto.color);
+      if (!usandoDemo && mv.model && mv.model.getMaterialByName) {
+        Object.entries(coloresDelAuto()).forEach(([nombre, color]) => {
+          const mat = mv.model.getMaterialByName(nombre);
+          if (mat) mat.pbrMetallicRoughness.setBaseColorFactor(color);
+        });
       }
       dosCuadros(() => {
         const d = mv.getDimensions();
