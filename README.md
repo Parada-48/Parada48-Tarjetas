@@ -52,7 +52,17 @@ When the user comes back from AR, the page returns to the card. On iPhone, if it
 
 ## The 3D models
 
-Only the SUV exists as a 3D model so far. Card 014 (SUV Flama Hot) uses `suv-flama-hot.glb`, with its roof box and flames. The other 15 cards use `suv-base.glb`, the same SUV without the box and flames, painted each card's color. The sedán, coupé and pickup cards show this SUV until their own models are added: export each car as `.glb`, put it in `models/` and change its `modelo` in `autos.js`. The QR codes don't change, so the printed cards keep working.
+| File | Car | Used by |
+|---|---|---|
+| `models/sedan.glb` | Sedán (from `autitos.obj`) | 001, 008, 009, 016 |
+| `models/coupe.glb` | Coupé (from `autitos.obj`) | 002, 005, 011 |
+| `models/pickup.glb` | Pickup (from `autitos.obj`) | 003, 006, 012, 015 |
+| `models/suv-base.glb` | SUV without roof box or flames (from `autitos.glb`) | 004, 007, 010, 013 |
+| `models/suv-flama-hot.glb` | SUV with roof box and flames | 014 (and the old 025 test card) |
+
+The OBJ had the cars lying at an angle, so they were turned upright, put at real size (sedán 4.5 m, coupé 4.3 m, pickup 5.3 m) and given web materials. The OBJ came without its `.mtl` file, so the colors of glass, tyres, rims and lights were set by hand. Each card paints its car's body with `color` and its headlights with the card's light color (`autos.js`).
+
+The cards' extras (stripes, decals, siren, taxi sign, roof racks) aren't in the 3D files yet, so the cars show the right body and color without them. To add them: export them from 3ds Max (or a new `.obj` + `.mtl`) and they can be attached to each car.
 
 ## Adding another card
 

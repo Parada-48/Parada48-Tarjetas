@@ -27,119 +27,65 @@
                     al que apunta la línea (se obtiene con ?auto=014&editar=1 tocando el auto)
                     y pantalla [x, y] dónde va el chip (0–1).
 
-  MODELOS 3D: por ahora solo existe el SUV. Las tarjetas de sedán, coupé y pickup
-  usan el SUV pintado de su color hasta que se agreguen sus modelos: exportá cada auto
-  como .glb, ponelo en /models y cambiá su "modelo" (y los "punto" de sus etiquetas).
+  MODELOS 3D: models/sedan.glb, coupe.glb y pickup.glb vienen de autitos.obj y los SUV de
+  autitos.glb (3ds Max), enderezados y en tamaño real. Cada tarjeta usa el de su carrocería, pintado de
+  su color y con las luces del color de su tarjeta. El SUV Flama Hot (014) tiene su propio
+  modelo con baúl de techo y llamas.
 */
 
-// Puntos de las etiquetas sobre el SUV (techo, lateral, capó o decorado, faro)
-const PUNTOS_SUV = { techo: "-0.40 1.70 0.00", lado: "0.71 1.08 1.06", decorado: "1.04 1.12 0.00", faro: "2.01 0.63 0.72" };
-const PUNTOS_SUV_FLAMA = { techo: "-0.59 2.10 -0.01", lado: "0.71 1.08 1.06", decorado: "-0.01 0.72 1.01", faro: "2.01 0.63 0.72" };
+// Modelos por carrocería: archivo, largo real (m), material de los faros y puntos de las etiquetas
+const MODELOS = {
+  sedan:  { modelo: "models/sedan.glb",  largoReal: 4.5, faros: "Faros",
+            puntos: { techo: "-0.19 1.29 0.00", lado: "0.27 0.47 0.93", decorado: "0.95 0.91 0.00", faro: "1.93 0.48 0.76" } },
+  coupe:  { modelo: "models/coupe.glb",  largoReal: 4.3, faros: "Luces",
+            puntos: { techo: "-0.52 1.25 0.00", lado: "0.68 0.48 0.87", decorado: "0.73 0.89 0.00", faro: "1.98 0.57 0.66" } },
+  pickup: { modelo: "models/pickup.glb", largoReal: 5.3, faros: "Luces",
+            puntos: { techo: "0.30 1.59 0.00", lado: "0.66 0.59 1.04", decorado: "1.42 1.13 0.00", faro: "2.37 0.64 0.87" } },
+  suv:    { modelo: "models/suv-base.glb", largoReal: 4.4, faros: null,   // en el SUV el material de los faros también pinta las llantas
+            puntos: { techo: "-0.40 1.70 0.00", lado: "0.71 1.08 1.06", decorado: "1.04 1.12 0.00", faro: "2.01 0.63 0.72" } },
+  suvFlama: { modelo: "models/suv-flama-hot.glb", largoReal: 4.4, faros: null,
+            puntos: { techo: "-0.59 2.10 -0.01", lado: "0.71 1.08 1.06", decorado: "-0.01 0.72 1.01", faro: "2.01 0.63 0.72" } }
+};
+const LUZ = { Naranja: "#FF8C1A", Amarilla: "#FFD43B", Blanca: "#F4F4F4", Verde: "#8EE04F", "Ámbar": "#FFB300" };
 
-// Las cuatro etiquetas de la franja roja de la tarjeta
-function etiquetas(carroceria, decorado, luces, techo, p) {
-  p = p || PUNTOS_SUV;
-  return [
-    { titulo: "Techo",      valor: techo,      punto: p.techo,    pantalla: [0.22, 0.17] },
-    { titulo: "Carrocería", valor: carroceria, punto: p.lado,     pantalla: [0.79, 0.25] },
-    { titulo: "Decorado",   valor: decorado,   punto: p.decorado, pantalla: [0.17, 0.65], cursiva: true },
-    { titulo: "Luces",      valor: luces,      punto: p.faro,     pantalla: [0.83, 0.64] }
-  ];
+// Arma un auto: tipo de carrocería + color + las cuatro etiquetas de la franja roja de la tarjeta
+function auto(tipo, d) {
+  const m = MODELOS[tipo];
+  const colores = Object.assign({}, d.colores || {});
+  if (tipo === "suv") colores.Material__418 = d.color;          // capó y techo del mismo color que la carrocería
+  if (m.faros && LUZ[d.luces]) colores[m.faros] = LUZ[d.luces];  // faros del color de la tarjeta
+  const p = m.puntos;
+  return Object.assign({
+    modelo: m.modelo, largoReal: m.largoReal, colores,
+    personalizacion: [
+      { titulo: "Techo",      valor: d.techo,      punto: p.techo,    pantalla: [0.22, 0.17] },
+      { titulo: "Carrocería", valor: d.carroceria, punto: p.lado,     pantalla: [0.79, 0.25] },
+      { titulo: "Decorado",   valor: d.decorado,   punto: p.decorado, pantalla: [0.17, 0.65], cursiva: true },
+      { titulo: "Luces",      valor: d.luces,      punto: p.faro,     pantalla: [0.83, 0.64] }
+    ]
+  }, d);
 }
 
-// Pinta la carrocería y también el capó/techo negro del SUV, para que el auto quede de un solo color
-function pintura(hex) { return { color: hex, colores: { Material__418: hex } }; }
-
-const SUV = "models/suv-base.glb";            // SUV sin baúl ni llamas
-const SUV_FLAMA = "models/suv-flama-hot.glb"; // SUV de Carlos Tolosa, con baúl de techo y llamas
-const LARGO = { suv: 4.4, sedan: 4.5, coupe: 4.3, pickup: 5.3 };
-
 window.KM48_AUTOS = {
-  "001": { nombre: "Sedán Drift Clásico", numero: "001/120", creador: "Fabricio Castillo",
-           modelo: SUV, /* provisorio: falta el modelo del sedán */ tarjeta: "targets/001.mind",
-           ...pintura("#E8850F"), largoReal: LARGO.sedan,
-           personalizacion: etiquetas("Sedán", "Cuadriculado", "Naranja", "Techo liso") },
-
-  "002": { nombre: "Coupé Plata Boreal", numero: "002/120", creador: "Ana María Sosa",
-           modelo: SUV, /* provisorio: falta el modelo del coupé */ tarjeta: "targets/002.mind",
-           ...pintura("#BFC3C8"), largoReal: LARGO.coupe,
-           personalizacion: etiquetas("Coupé", "Rayas rojas", "Amarilla", "Faros retráctiles") },
-
-  "003": { nombre: "Pickup Nitro 48", numero: "003/120", creador: "Lucía Fernández",
-           modelo: SUV, /* provisorio: falta el modelo de la pickup */ tarjeta: "targets/003.mind",
-           ...pintura("#C8327E"), largoReal: LARGO.pickup,
-           personalizacion: etiquetas("Pickup", "Rayas blancas", "Naranja", "Caja de carga") },
-
-  "004": { nombre: "SUV Ruta Azul", numero: "004/120", creador: "Martín Gómez",
-           modelo: SUV, tarjeta: "targets/004.mind",
-           ...pintura("#A9ADB3"), largoReal: LARGO.suv,
-           personalizacion: etiquetas("SUV", "Tribal", "Amarilla", "Barras de techo") },
-
-  "005": { nombre: "Coupé Tormenta Furioso", numero: "005/120", creador: "Sofía Romero",
-           modelo: SUV, /* provisorio: falta el modelo del coupé */ tarjeta: "targets/005.mind",
-           ...pintura("#E8930F"), largoReal: LARGO.coupe,
-           personalizacion: etiquetas("Coupé", "Rayas negras", "Blanca", "Antena deportiva") },
-
-  "006": { nombre: "Pickup Ónix Total", numero: "006/120", creador: "Joaquín Herrera",
-           modelo: SUV, /* provisorio: falta el modelo de la pickup */ tarjeta: "targets/006.mind",
-           ...pintura("#B0170C"), largoReal: LARGO.pickup,
-           personalizacion: etiquetas("Pickup", "Tribal negro", "Naranja", "Caja de carga") },
-
-  "007": { nombre: "SUV Sombra Clásico", numero: "007/120", creador: "Valentina Díaz",
-           modelo: SUV, tarjeta: "targets/007.mind",
-           ...pintura("#E6E8EA"), largoReal: LARGO.suv,
-           personalizacion: etiquetas("SUV", "Patrulla", "Amarilla", "Sirena") },
-
-  "008": { nombre: "Sedán Puma Urbano", numero: "008/120", creador: "Tomás Acosta",
-           modelo: SUV, /* provisorio: falta el modelo del sedán */ tarjeta: "targets/008.mind",
-           ...pintura("#2AA3D3"), largoReal: LARGO.sedan,
-           personalizacion: etiquetas("Sedán", "Zarpazo", "Verde", "Techo liso") },
-
-  "009": { nombre: "Sedán Jaguar Salvaje", numero: "009/120", creador: "Camila Benítez",
-           modelo: SUV, /* provisorio: falta el modelo del sedán */ tarjeta: "targets/009.mind",
-           ...pintura("#1E8C3A"), largoReal: LARGO.sedan,
-           personalizacion: etiquetas("Sedán", "Rayas blancas", "Verde", "Barras de techo") },
-
-  "010": { nombre: "SUV Cromo Max", numero: "010/120", creador: "Nicolás Ruiz",
-           modelo: SUV, tarjeta: "targets/010.mind",
-           ...pintura("#E8B400"), largoReal: LARGO.suv,
-           personalizacion: etiquetas("SUV", "Taxi", "Naranja", "Cartel de taxi") },
-
-  "011": { nombre: "Coupé Noche XL", numero: "011/120", creador: "Agustina Molina",
-           modelo: SUV, /* provisorio: falta el modelo del coupé */ tarjeta: "targets/011.mind",
-           ...pintura("#2A2B30"), largoReal: LARGO.coupe,
-           personalizacion: etiquetas("Coupé", "Línea roja", "Ámbar", "Antena deportiva") },
-
-  "012": { nombre: "Pickup Pampa Azul", numero: "012/120", creador: "Federico Ríos",
-           modelo: SUV, /* provisorio: falta el modelo de la pickup */ tarjeta: "targets/012.mind",
-           ...pintura("#E9EAEC"), largoReal: LARGO.pickup,
-           personalizacion: etiquetas("Pickup", "Rayas azules", "Amarilla", "Canasto de techo") },
-
-  "013": { nombre: "SUV Ciclón Dorado", numero: "013/120", creador: "Julieta Peralta",
-           modelo: SUV, tarjeta: "targets/013.mind",
-           ...pintura("#2B9ED6"), largoReal: LARGO.suv,
-           personalizacion: etiquetas("SUV", "Raya blanca", "Verde", "Canasto de techo") },
-
-  "014": { nombre: "SUV Flama Hot", numero: "014/120", creador: "Carlos Tolosa",
-           modelo: SUV_FLAMA, tarjeta: "targets/014.mind",
-           color: "#C8140F", largoReal: LARGO.suv,
-           personalizacion: etiquetas("SUV", "Decal Acalorado", "Ámbar", "Porta Equipaje", PUNTOS_SUV_FLAMA) },
-
-  "015": { nombre: "Pickup Acero Extremo", numero: "015/120", creador: "Florencia Ortiz",
-           modelo: SUV, /* provisorio: falta el modelo de la pickup */ tarjeta: "targets/015.mind",
-           ...pintura("#E07A0C"), largoReal: LARGO.pickup,
-           personalizacion: etiquetas("Pickup", "Raya blanca", "Naranja", "Caja de carga") },
-
-  "016": { nombre: "Sedán Cometa Nocturno", numero: "016/120", creador: "Matías Aguirre",
-           modelo: SUV, /* provisorio: falta el modelo del sedán */ tarjeta: "targets/016.mind",
-           ...pintura("#D9DCDF"), largoReal: LARGO.sedan,
-           personalizacion: etiquetas("Sedán", "Llama tribal", "Amarilla", "Alerón de techo") },
+  "001": auto("sedan",  { nombre: "Sedán Drift Clásico",    numero: "001/120", creador: "Fabricio Castillo", tarjeta: "targets/001.mind", color: "#E8850F", carroceria: "Sedán",  decorado: "Cuadriculado",    luces: "Naranja",  techo: "Techo liso" }),
+  "002": auto("coupe",  { nombre: "Coupé Plata Boreal",     numero: "002/120", creador: "Ana María Sosa",    tarjeta: "targets/002.mind", color: "#BFC3C8", carroceria: "Coupé",  decorado: "Rayas rojas",     luces: "Amarilla", techo: "Faros retráctiles" }),
+  "003": auto("pickup", { nombre: "Pickup Nitro 48",        numero: "003/120", creador: "Lucía Fernández",   tarjeta: "targets/003.mind", color: "#C8327E", carroceria: "Pickup", decorado: "Rayas blancas",   luces: "Naranja",  techo: "Caja de carga" }),
+  "004": auto("suv",    { nombre: "SUV Ruta Azul",          numero: "004/120", creador: "Martín Gómez",      tarjeta: "targets/004.mind", color: "#A9ADB3", carroceria: "SUV",    decorado: "Tribal",          luces: "Amarilla", techo: "Barras de techo" }),
+  "005": auto("coupe",  { nombre: "Coupé Tormenta Furioso", numero: "005/120", creador: "Sofía Romero",      tarjeta: "targets/005.mind", color: "#E8930F", carroceria: "Coupé",  decorado: "Rayas negras",    luces: "Blanca",   techo: "Antena deportiva" }),
+  "006": auto("pickup", { nombre: "Pickup Ónix Total",      numero: "006/120", creador: "Joaquín Herrera",   tarjeta: "targets/006.mind", color: "#B0170C", carroceria: "Pickup", decorado: "Tribal negro",    luces: "Naranja",  techo: "Caja de carga" }),
+  "007": auto("suv",    { nombre: "SUV Sombra Clásico",     numero: "007/120", creador: "Valentina Díaz",    tarjeta: "targets/007.mind", color: "#E6E8EA", carroceria: "SUV",    decorado: "Patrulla",        luces: "Amarilla", techo: "Sirena" }),
+  "008": auto("sedan",  { nombre: "Sedán Puma Urbano",      numero: "008/120", creador: "Tomás Acosta",      tarjeta: "targets/008.mind", color: "#2AA3D3", carroceria: "Sedán",  decorado: "Zarpazo",         luces: "Verde",    techo: "Techo liso" }),
+  "009": auto("sedan",  { nombre: "Sedán Jaguar Salvaje",   numero: "009/120", creador: "Camila Benítez",    tarjeta: "targets/009.mind", color: "#1E8C3A", carroceria: "Sedán",  decorado: "Rayas blancas",   luces: "Verde",    techo: "Barras de techo" }),
+  "010": auto("suv",    { nombre: "SUV Cromo Max",          numero: "010/120", creador: "Nicolás Ruiz",      tarjeta: "targets/010.mind", color: "#E8B400", carroceria: "SUV",    decorado: "Taxi",            luces: "Naranja",  techo: "Cartel de taxi" }),
+  "011": auto("coupe",  { nombre: "Coupé Noche XL",         numero: "011/120", creador: "Agustina Molina",   tarjeta: "targets/011.mind", color: "#2A2B30", carroceria: "Coupé",  decorado: "Línea roja",      luces: "Ámbar",    techo: "Antena deportiva" }),
+  "012": auto("pickup", { nombre: "Pickup Pampa Azul",      numero: "012/120", creador: "Federico Ríos",     tarjeta: "targets/012.mind", color: "#E9EAEC", carroceria: "Pickup", decorado: "Rayas azules",    luces: "Amarilla", techo: "Canasto de techo" }),
+  "013": auto("suv",    { nombre: "SUV Ciclón Dorado",      numero: "013/120", creador: "Julieta Peralta",   tarjeta: "targets/013.mind", color: "#2B9ED6", carroceria: "SUV",    decorado: "Raya blanca",     luces: "Verde",    techo: "Canasto de techo" }),
+  "014": auto("suvFlama", { nombre: "SUV Flama Hot",        numero: "014/120", creador: "Carlos Tolosa",     tarjeta: "targets/014.mind", color: "#C8140F", carroceria: "SUV",    decorado: "Decal Acalorado", luces: "Ámbar",    techo: "Porta Equipaje" }),
+  "015": auto("pickup", { nombre: "Pickup Acero Extremo",   numero: "015/120", creador: "Florencia Ortiz",   tarjeta: "targets/015.mind", color: "#E07A0C", carroceria: "Pickup", decorado: "Raya blanca",     luces: "Naranja",  techo: "Caja de carga" }),
+  "016": auto("sedan",  { nombre: "Sedán Cometa Nocturno",  numero: "016/120", creador: "Matías Aguirre",    tarjeta: "targets/016.mind", color: "#D9DCDF", carroceria: "Sedán",  decorado: "Llama tribal",    luces: "Amarilla", techo: "Alerón de techo" }),
 
   // Tarjeta de prueba anterior (el QR ?auto=025 de las tarjetas de referencia en Figma)
-  "025": { nombre: "SUV Flama Hot", numero: "25/125", creador: "Carlos Tolosa",
-           modelo: SUV_FLAMA, tarjeta: "targets/025.mind",
-           color: "#C8140F", largoReal: LARGO.suv,
-           personalizacion: etiquetas("SUV", "Decal Acalorado", "Ámbar", "Porta Equipaje", PUNTOS_SUV_FLAMA) }
+  "025": auto("suvFlama", { nombre: "SUV Flama Hot",        numero: "25/125",  creador: "Carlos Tolosa",     tarjeta: "targets/025.mind", color: "#C8140F", carroceria: "SUV",    decorado: "Decal Acalorado", luces: "Ámbar",    techo: "Porta Equipaje" })
 };
 
 // Valores que comparten todos los autos (cada auto puede cambiarlos)

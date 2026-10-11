@@ -1,8 +1,9 @@
-Modelos 3D de los autos (.glb).
+Modelos 3D de los autos (.glb), en metros y mirando hacia adelante (+X).
 
-suv-flama-hot.glb  SUV de Carlos Tolosa (Nº 014): con baúl de techo, llamas y patentes.
-suv-base.glb       El mismo SUV sin baúl ni llamas. Lo usan las demás tarjetas, pintado
-                   del color de cada una (autos.js), hasta que se sumen sus propios modelos.
+sedan.glb          Sedán   (de autitos.obj)  → tarjetas 001, 008, 009, 016
+coupe.glb          Coupé   (de autitos.obj)  → tarjetas 002, 005, 011
+pickup.glb         Pickup  (de autitos.obj)  → tarjetas 003, 006, 012, 015
+suv-base.glb       SUV sin baúl ni llamas    → tarjetas 004, 007, 010, 013
+suv-flama-hot.glb  SUV de Carlos Tolosa, con baúl de techo y llamas → tarjeta 014
 
-Para agregar el modelo de un auto: exportalo como .glb, ponelo en esta carpeta
-y cambiá el campo "modelo" de ese auto en autos.js.
+Cada tarjeta pinta la carrocería (material "Pintura") y los faros con los colores de autos.js.
