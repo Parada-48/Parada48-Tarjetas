@@ -1,0 +1,12 @@
+Librerías incluidas en esta carpeta (se sirven desde el mismo sitio para que la
+tarjeta siga funcionando aunque cambien los CDN):
+
+mindar-image-three.prod.js
+  MindAR 1.1.5 — seguimiento de imágenes en el navegador (incluye three.js r136
+  y TensorFlow.js). https://github.com/hiukim/mind-ar-js
+  Licencia MIT, Copyright (c) 2020 hiukim. Incluye three.js (MIT, Copyright ©
+  2010-2021 three.js authors) y TensorFlow.js (Apache 2.0, Google LLC).
+
+GLTFLoader.js, RoomEnvironment.js
+  three.js r136, examples/js. https://github.com/mrdoob/three.js
+  Licencia MIT, Copyright © 2010-2021 three.js authors.
