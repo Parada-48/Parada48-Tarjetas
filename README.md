@@ -17,11 +17,11 @@ Parada48-Tarjetas/
 
 ## How it works
 
-1. Each card's QR holds its own link, e.g. `https://juanpablogdesign.github.io/Parada48-Tarjetas/?auto=014`. The number picks the car in `autos.js`.
+1. Each card's QR holds its own link, e.g. `https://parada-48.github.io/Parada48-Tarjetas/?auto=014`. The number picks the car in `autos.js`.
 2. The page opens the camera and looks for **the back of a KM48 card** (`targets/todas.mind` has one back of each color).
 3. While the camera is on, the page also **reads the QR** on the card. If the person points at a different card, it switches to that card's car, so several cards can be shown one after another.
 
-**One link for every card:** `https://juanpablogdesign.github.io/Parada48-Tarjetas/` (without a number). It opens the camera and waits for any card: point at a card and its car appears; point at the next one and the car changes. Handy for events or for showing all the cards with one phone.
+**One link for every card:** `https://parada-48.github.io/Parada48-Tarjetas/` (without a number). It opens the camera and waits for any card: point at a card and its car appears; point at the next one and the car changes. Handy for events or for showing all the cards with one phone.
 3. When it finds the card, the car appears standing on it and follows the card as you move the phone or the card.
 
 The card's real size is known, so the car is shown at true scale. At 1:64 it's 6.9 cm long, so it fits on the 9 cm card. At 1:43 it's 10.2 cm and sticks out past the edges.
@@ -91,7 +91,7 @@ The cards' extras (stripes, decals, siren, taxi sign, roof racks) aren't in the 
 ## Adding another card
 
 1. **The car:** export its `.glb` into `models/` (e.g. `models/auto-017.glb`).
-2. **The QR:** make it from `https://juanpablogdesign.github.io/Parada48-Tarjetas/?auto=014` and put it on that card's back in Figma.
+2. **The QR:** make it from `https://parada-48.github.io/Parada48-Tarjetas/?auto=014` and put it on that card's back in Figma.
 3. **The tracking file:** nothing to do if the new card uses one of the four existing colors. For a new back design, export one back of each color from Figma as PNGs about 1000 px wide, drop them all into the MindAR compiler at **hiukim.github.io/mind-ar-js-doc/tools/compile**, click **Start**, then **Download**, and replace `targets/todas.mind`.
 4. **The data:** in `autos.js`, copy a line like `"013"`, change the id to `"017"` and update the fields.
 
@@ -115,7 +115,7 @@ At the bottom of the file:
 
 ## Publishing (GitHub Pages)
 
-The site is live at `https://juanpablogdesign.github.io/Parada48-Tarjetas/`. To update it, open the repository on GitHub, click **Add file → Upload files**, and drag in the changed files and folders. Drag the `lib` and `targets` **folders themselves** so they keep their names, then click **Commit changes**. It updates in 1–2 minutes.
+The site is live at `https://parada-48.github.io/Parada48-Tarjetas/`. To update it, open the repository on GitHub (github.com/Parada-48/Parada48-Tarjetas), click **Add file → Upload files**, and drag in the changed files and folders. Drag the `lib` and `targets` **folders themselves** so they keep their names, then click **Commit changes**. It updates in 1–2 minutes.
 
 The camera only works over **https**, so test with the published link, not by opening the file on your computer.
 

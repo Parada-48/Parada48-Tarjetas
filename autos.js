@@ -4,7 +4,7 @@
   Este es el único archivo que necesitás editar para sumar o cambiar autos.
 
   Cada tarjeta tiene su propio QR que abre esta página con ?auto=<número>
-  Ejemplo:  https://juanpablogdesign.github.io/Parada48-Tarjetas/?auto=014
+  Ejemplo:  https://parada-48.github.io/Parada48-Tarjetas/?auto=014
   El link sin número (…/Parada48-Tarjetas/) sirve para cualquier tarjeta: la página lee
   el QR con la cámara y muestra el auto de cada tarjeta a la que se apunte.
 
