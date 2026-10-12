@@ -5,12 +5,13 @@ The web page that opens when someone scans the QR on the back of a Kilómetro 48
 It follows the Figma mockup **Interfaz AR – Mockup** (Diseño TP3 TIFF).
 
 ```
-km48-ar/
+Parada48-Tarjetas/
 ├── index.html   ← the page (design + logic)
 ├── autos.js     ← card data: the only file you normally edit
-├── models/      ← the 3D cars (suv-flama-hot.glb, suv-base.glb)
+├── models/      ← the 3D cars (sedan, coupe, pickup, suv-base, suv-flama-hot)
 ├── targets/     ← the card backs the camera recognizes (todas.mind: one per color)
-├── lib/         ← AR libraries (MindAR + three.js), served from your own site
+├── lib/         ← AR libraries (MindAR, three.js, jsQR + lector-qr.js), served from your own site
+├── img/         ← app icons
 └── README.md
 ```
 
@@ -58,6 +59,20 @@ When the user comes back from AR, the page returns to the card. On iPhone, if it
 - `targets/todas.mind` was made from the final backs of cards 001 (orange), 002 (blue), 004 (yellow) and 007 (red). It recognizes every card of those four colors; which car to show comes from the QR.
 - For the QR to be read, the card should fill a good part of the screen (about 15–30 cm away).
 - **The blue and red backs have a white QR on a dark background** (inverted). Most phones read it, but test it with a couple of iPhones and Androids before printing. The yellow and orange backs use a dark QR, which every phone reads.
+
+### How the car stays steady on the card
+
+The camera's estimate of where the card is shakes a little on every frame, and now and then it's wrong: a blurry frame, a reflection, or the card read "tilted the other way". The page doesn't copy those readings straight onto the car:
+
+- Impossible positions are ignored: behind the camera, seen edge-on, or meters away.
+- A sudden big jump only counts if the next few frames agree with it. One bad frame doesn't move the car.
+- When the camera loses the card for a moment, the car stays where it was instead of drifting, then glides back.
+- The car glides between readings. It barely moves when the card is still, and follows quickly when the card or phone moves.
+- Once a card color is recognized, the camera only looks for that color, because the four colors look almost the same in grey. Switching to a card of another color takes about half a second.
+- The QR is read in the background (`lib/lector-qr.js`), so it doesn't slow down the card tracking.
+- If the phone is rotated, the camera restarts with the new image size.
+
+If the car still jitters on a particular phone, more light and a matte card help most.
 
 ## The 3D models
 

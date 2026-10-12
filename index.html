@@ -790,10 +790,10 @@
     //  AUTO SOBRE LA TARJETA (MindAR: reconoce el dorso impreso con la cámara)
     // ======================================================================
     let mindar = null, T = null;
-    let raiz, giro, escalador, modeloGrupo, anilloGrupo, largoModelo = 1;
+    let seguidor, raiz, giro, escalador, modeloGrupo, anilloGrupo, largoModelo = 1;
     const puntos3d = [];
     let encontrado = false, tPerdido = null, procesando = false;
-    let escalaActual = 0, escalaObjetivo = 0, popT = 1, ultimoCuadro = 0;
+    let escalaActual = 0, escalaObjetivo = 0, popT = 1, ultimoCuadro = 0, ultimaVezVisible = 0;
     let preparando = null, entrando = null;
 
     function cargarScript(src) {
@@ -838,13 +838,15 @@
       window.THREE = T;
       await cargarScript(LIB + 'GLTFLoader.js');
       await cargarScript(LIB + 'RoomEnvironment.js');
-      cargarScript(LIB + 'jsQR.js').then(iniciarLectorQR).catch(() => {});
+      prepararLectorQR();
       progresoTarjeta(.45);
 
+      // El filtro de MindAR suaviza cada número de la matriz por separado y deja pasar los saltos:
+      // se apaga y el suavizado se hace acá, sobre la posición y el giro (ver "Seguimiento suave").
       mindar = new window.MINDAR.IMAGE.MindARThree({
         container: $('ar-tarjeta'), imageTargetSrc: urlObjetivo, maxTrack: 1,
         uiLoading: 'no', uiScanning: 'no', uiError: 'no',
-        filterMinCF: 0.0001, filterBeta: 1000, warmupTolerance: 3, missTolerance: 8
+        filterMinCF: 1, filterBeta: 0, warmupTolerance: 5, missTolerance: 6
       });
       const { renderer, scene } = mindar;
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
@@ -855,7 +857,11 @@
       scene.environment = pmrem.fromScene(new T.RoomEnvironment(), 0.04).texture;
       scene.add(new T.HemisphereLight(0xffffff, 0x3a3f7a, 0.5));
 
-      // Jerarquía: tarjeta → raíz (de pie sobre la tarjeta) → giro (el usuario lo rota) → escala → modelo
+      // Jerarquía: seguidor (sigue a la tarjeta, suavizado) → raíz (de pie sobre la tarjeta)
+      //            → giro (el usuario lo rota) → escala → modelo
+      seguidor = new T.Group();
+      seguidor.visible = false;
+      scene.add(seguidor);
       raiz = new T.Group();
       raiz.rotation.x = Math.PI / 2;           // el "arriba" del auto apunta hacia afuera de la tarjeta
       giro = new T.Group();
@@ -866,14 +872,126 @@
       anilloGrupo = crearAnillo();
       raiz.add(anilloGrupo);
       raiz.visible = false;      // hasta que haya auto cargado
+      seguidor.add(raiz);
 
-      // Un ancla por cada versión de la tarjeta que haya en el archivo .mind
+      // Un ancla por cada versión de la tarjeta que haya en el archivo .mind (no llevan nada adentro:
+      // el seguidor copia su posición, suavizada)
       for (let i = 0; i < 8; i++) {
         const a = mindar.addAnchor(i);
-        a.onTargetFound = () => { a.group.add(raiz); alEncontrar(); };
-        a.onTargetLost = alPerder;
+        a.onTargetFound = elegirAncla;
+        a.onTargetLost = elegirAncla;
       }
       progresoTarjeta(1);
+    }
+
+    // ======================================================================
+    //  SEGUIMIENTO SUAVE
+    //  MindAR da una pose nueva por cada cuadro que procesa (10–20 por segundo en un celular), con
+    //  temblor y, a veces, poses erróneas: un cuadro movido, un reflejo o un "espejo" del dorso que
+    //  inclina la tarjeta de golpe. El auto no copia esas poses tal cual:
+    //   · se descartan las imposibles (detrás de la cámara, de canto, a metros de distancia);
+    //   · un salto grande tiene que repetirse en varios cuadros seguidos antes de aceptarse;
+    //   · mientras MindAR busca la tarjeta repite la última pose: esas no cuentan;
+    //   · entre pose y pose, el auto se desliza (casi quieto si solo tiembla, rápido si se mueve).
+    // ======================================================================
+    let anclaActiva = null, poseLista = false, candidato = null, ultimaAceptada = 0;
+    const SALTO_LADO = 0.35, SALTO_PROF = 0.22, SALTO_GIRO = 0.44;   // en anchos de tarjeta / proporción de la distancia / radianes (25°)
+    let objP, objQ, objS, verP, verQ, verS, tmpP, tmpQ, tmpS, tmpV, ejeZ;
+    function prepararPoses() {
+      if (objP) return;
+      objP = new T.Vector3(); objQ = new T.Quaternion(); objS = new T.Vector3(1, 1, 1);
+      verP = new T.Vector3(); verQ = new T.Quaternion(); verS = new T.Vector3(1, 1, 1);
+      tmpP = new T.Vector3(); tmpQ = new T.Quaternion(); tmpS = new T.Vector3(); tmpV = new T.Vector3();
+      ejeZ = new T.Vector3(0, 0, 1);
+    }
+
+    // Se sigue a una sola versión del dorso por vez. Los cuatro colores se parecen mucho para la cámara
+    // (los ve en gris): mientras se sigue una, MindAR solo busca esa, así no salta a otra versión.
+    function elegirAncla() {
+      if (!mindar || !procesando) return;
+      if (anclaActiva && anclaActiva.visible) return;
+      const otra = mindar.anchors.find(a => a.visible) || null;
+      if (otra !== anclaActiva) { anclaActiva = otra; poseLista = false; candidato = null; }
+      if (mindar.controller) mindar.controller.interestedTargetIndex = otra ? otra.targetIndex : -1;
+      if (!otra) seguidor.visible = false;
+      if (otra) alEncontrar(); else alPerder();
+    }
+    function soltarAncla() {
+      anclaActiva = null; poseLista = false; candidato = null;
+      if (seguidor) seguidor.visible = false;
+      if (mindar && mindar.controller) mindar.controller.interestedTargetIndex = -1;
+    }
+
+    // Diferencia entre dos poses: corrimiento de lado (en anchos de tarjeta), de profundidad
+    // (proporción de la distancia, se ve como cambio de tamaño) y de giro (radianes).
+    function diferencia(p1, q1, p2, q2, ancho) {
+      const dist = Math.max(1e-6, p1.length());
+      tmpV.copy(p2).sub(p1);
+      const enRayo = tmpV.dot(p1) / dist;
+      const lado = Math.sqrt(Math.max(0, tmpV.lengthSq() - enRayo * enRayo)) / ancho;
+      return { lado, prof: Math.abs(enRayo) / dist, giro: q1.angleTo(q2) };
+    }
+    const esSalto = d => d.lado > SALTO_LADO || d.prof > SALTO_PROF || d.giro > SALTO_GIRO;
+
+    function poseCreible(p, q, s) {
+      if (!(s.x > 0) || !(p.z < 0)) return false;                       // detrás de la cámara
+      const dist = p.length() / s.x;                                     // distancia en anchos de tarjeta
+      if (dist < 0.5 || dist > 45) return false;                         // a menos de 4,5 cm o a más de 4 m
+      const normal = tmpV.copy(ejeZ).applyQuaternion(q);
+      return normal.dot(p) / p.length() < -0.2;                          // la cara impresa mira a la cámara (no de canto)
+    }
+
+    // Cada pose nueva que entrega MindAR
+    function medirPose(i, c) {
+      if (!anclaActiva || anclaActiva.targetIndex !== i || !seguidor) return;
+      const st = c.trackingStates && c.trackingStates[i];
+      if (poseLista && st && !st.isTracking) return;    // perdió la tarjeta un momento: repite la pose anterior
+      prepararPoses();
+      anclaActiva.group.matrix.decompose(tmpP, tmpQ, tmpS);
+      if (!poseCreible(tmpP, tmpQ, tmpS)) return;
+      const ahora = performance.now();
+      if (!poseLista) {                                  // recién encontrada: va directo a la tarjeta
+        objP.copy(tmpP); objQ.copy(tmpQ); objS.copy(tmpS);
+        verP.copy(tmpP); verQ.copy(tmpQ); verS.copy(tmpS);
+        poseLista = true; candidato = null; ultimaAceptada = ahora;
+        if (ahora - ultimaVezVisible > 1200) popT = 0;   // aparece con el rebote solo si estaba oculto hace rato
+        seguidor.visible = true;
+        aplicarPose();
+        return;
+      }
+      if (!esSalto(diferencia(objP, objQ, tmpP, tmpQ, objS.x))) {
+        objP.copy(tmpP); objQ.copy(tmpQ); objS.copy(tmpS);
+        candidato = null; ultimaAceptada = ahora;
+        return;
+      }
+      // Salto grande: se acepta solo si los cuadros siguientes coinciden con él
+      if (candidato && !esSalto(diferencia(candidato.p, candidato.q, tmpP, tmpQ, objS.x))) {
+        candidato.n++; candidato.p.copy(tmpP); candidato.q.copy(tmpQ); candidato.s.copy(tmpS);
+      } else {
+        candidato = { n: 1, p: tmpP.clone(), q: tmpQ.clone(), s: tmpS.clone() };
+      }
+      const necesarios = ahora - ultimaAceptada > 600 ? 2 : 3;   // si hace rato que no hay poses buenas, alcanza con menos
+      if (candidato.n >= necesarios) {
+        objP.copy(candidato.p); objQ.copy(candidato.q); objS.copy(candidato.s);
+        candidato = null; ultimaAceptada = ahora;
+      }
+    }
+
+    // Cada cuadro de la pantalla: el auto se acerca a la última pose buena
+    function suavizarPose(dt) {
+      if (!poseLista) return;
+      const d = diferencia(verP, verQ, objP, objQ, objS.x);
+      const lim = (x, a, b) => Math.min(1, Math.max(0, (x - a) / (b - a)));
+      // Quieto (temblor de pocos mm o 1°): se mueve despacio y no tiembla. Moviéndose: sigue a la tarjeta enseguida.
+      const kMov = Math.max(lim(d.lado, 0.005, 0.07), lim(d.prof, 0.008, 0.05));
+      const kGiro = lim(d.giro, 0.01, 0.12);
+      const tMov = 150 - 115 * kMov, tGiro = 170 - 130 * kGiro;   // ms
+      const aMov = 1 - Math.exp(-dt / tMov), aGiro = 1 - Math.exp(-dt / tGiro);
+      verP.lerp(objP, aMov); verS.lerp(objS, aMov); verQ.slerp(objQ, aGiro);
+      aplicarPose();
+    }
+    function aplicarPose() {
+      seguidor.position.copy(verP); seguidor.quaternion.copy(verQ); seguidor.scale.copy(verS);
     }
 
     // Modelos 3D: se descargan una vez y se reutilizan al cambiar de tarjeta
@@ -973,6 +1091,8 @@
       const dt = Math.min(64, ahora - (ultimoCuadro || ahora));
       ultimoCuadro = ahora;
       if (!arrastre && Math.abs(velocidad) > 1e-5) { giro.rotation.y += velocidad * dt; velocidad *= Math.pow(0.9, dt / 16); }
+      suavizarPose(dt);
+      if (seguidor.visible && raiz.visible) ultimaVezVisible = ahora;
       escalaActual += (escalaObjetivo - escalaActual) * (1 - Math.pow(0.78, dt / 16));
       popT = Math.min(1, popT + dt / 340);
       const pop = 0.55 + 0.45 * easeOutBack(popT);
@@ -983,7 +1103,6 @@
 
     function actualizarVisibilidad() {
       const visible = encontrado && modeloListo && !!auto;
-      if (visible && !body.classList.contains('auto-visible')) popT = 0;
       body.classList.toggle('auto-visible', visible);
       if (!visible && vista === 'tarjeta' && procesando) estadoEscaneo(!encontrado ? 'buscando' : auto ? 'cargando' : 'leyendo');
     }
@@ -994,6 +1113,7 @@
       actualizarVisibilidad();
     }
     function alPerder() {
+      if (!encontrado) return;
       encontrado = false;
       clearTimeout(tPerdido);
       tPerdido = setTimeout(() => { if (!encontrado) actualizarVisibilidad(); }, 500);
@@ -1003,10 +1123,23 @@
     const lienzoQR = document.createElement('canvas');
     const ctxQR = lienzoQR.getContext('2d', { willReadFrequently: true });
     let lectorQR = null, cicloQR = 0, candidatoQR = { id: null, n: 0, t: 0 }, ultimoCambio = 0;
-    function iniciarLectorQR() { if (!lectorQR && window.jsQR) lectorQR = setInterval(leerQR, 450); }
+    // El QR se decodifica en segundo plano (lib/lector-qr.js): así no le quita tiempo al seguimiento
+    // de la tarjeta. Si el navegador no lo permite, se decodifica en la página, como antes.
+    let trabajadorQR = null, qrOcupado = false, qrDesde = 0;
+    function prepararLectorQR() {
+      if (trabajadorQR || window.jsQR) return iniciarLectorQR();
+      try {
+        trabajadorQR = new Worker(LIB + 'lector-qr.js');
+        trabajadorQR.onmessage = e => { qrOcupado = false; procesarQR(e.data); };
+        trabajadorQR.onerror = () => { trabajadorQR = null; qrOcupado = false; lectorEnPagina(); };
+        iniciarLectorQR();
+      } catch (_) { trabajadorQR = null; lectorEnPagina(); }
+    }
+    function lectorEnPagina() { cargarScript(LIB + 'jsQR.js').then(iniciarLectorQR).catch(() => {}); }
+    function iniciarLectorQR() { if (!lectorQR && (trabajadorQR || window.jsQR)) lectorQR = setInterval(leerQR, 450); }
     function zonaQR() {
       // El QR está en el centro del dorso y mide un tercio del ancho de la tarjeta
-      const a = mindar.anchors.find(x => x.group.visible);
+      const a = anclaActiva && anclaActiva.visible ? anclaActiva : null;
       if (!a) return null;
       const v = mindar.video, vr = v.getBoundingClientRect(), cr = mindar.renderer.domElement.getBoundingClientRect();
       const xs = [], ys = [];
@@ -1019,6 +1152,8 @@
     }
     function leerQR() {
       if (vista !== 'tarjeta' || !procesando || document.hidden || !videoTarjetaVivo() || body.classList.contains('modo-camara')) return;
+      if (!trabajadorQR && !window.jsQR) return;
+      if (qrOcupado && performance.now() - qrDesde < 3000) return;   // todavía decodificando el anterior
       const v = mindar.video, vw = v.videoWidth, vh = v.videoHeight;
       if (!vw) return;
       let z = encontrado ? zonaQR() : null;
@@ -1029,8 +1164,18 @@
       const W = Math.round(w * k), H = Math.round(h * k);
       lienzoQR.width = W; lienzoQR.height = H;
       ctxQR.drawImage(v, x, y, w, h, 0, 0, W, H);
-      const r = window.jsQR(ctxQR.getImageData(0, 0, W, H).data, W, H, { inversionAttempts: 'attemptBoth' });
-      const m = r && r.data && r.data.match(/[?&]auto=(\d{1,3})\b/);
+      const pixeles = ctxQR.getImageData(0, 0, W, H).data;
+      if (trabajadorQR) {
+        qrOcupado = true; qrDesde = performance.now();
+        trabajadorQR.postMessage({ datos: pixeles.buffer, ancho: W, alto: H }, [pixeles.buffer]);
+        return;
+      }
+      const r = window.jsQR(pixeles, W, H, { inversionAttempts: 'attemptBoth' });
+      procesarQR(r && r.data);
+    }
+    function procesarQR(texto) {
+      if (vista !== 'tarjeta' || !procesando) return;
+      const m = texto && String(texto).match(/[?&]auto=(\d{1,3})\b/);
       if (!m) return;
       const nuevo = idDe(m[1]);
       if (!AUTOS[nuevo] || nuevo === id) { candidatoQR.id = null; return; }
@@ -1087,6 +1232,7 @@
       }
       procesando = true;
       vigilarControlador();
+      mindar.video.addEventListener('resize', revisarVideo);
       mindar.renderer.setAnimationLoop(cuadro);
     }
     // MindAR no avisa cuándo termina de procesar el último cuadro después de pausar.
@@ -1102,15 +1248,67 @@
           if (!c.processingVideo && finLoop) { const f = finLoop; finLoop = null; dosCuadros(() => setTimeout(f, 30)); }
           return;
         }
-        if (!procesando) return;   // resultados que llegan después de pausar
+        if (c.__descartado || !procesando) return;   // controlador viejo, o resultados que llegan después de pausar
         original(d);
+        if (d.type === 'updateMatrix' && d.worldMatrix) medirPose(d.targetIndex, c);
       };
     }
+
+    // Si la imagen de la cámara cambia de tamaño (el celular se giró), MindAR sigue calculando con
+    // el tamaño anterior y las poses salen mal: se reinicia la cámara con el tamaño nuevo.
+    let tVideo = null, reiniciando = null;
+    const videoCoincide = () => {
+      const v = mindar && mindar.video, c = mindar && mindar.controller;
+      return !v || !c || !v.videoWidth || (v.videoWidth === c.inputWidth && v.videoHeight === c.inputHeight);
+    };
+    function revisarVideo() {
+      if (!mindar || !videoTarjetaVivo()) return;
+      clearTimeout(tVideo);
+      tVideo = setTimeout(() => {
+        if (!videoCoincide()) { if (vista === 'tarjeta') reiniciarCamaraTarjeta(); }
+        else mindar.resize();
+      }, 350);
+    }
+    // Apaga la cámara de la tarjeta. MindAR arma un controlador nuevo cada vez que arranca:
+    // el viejo se marca como descartado y su proceso en segundo plano se cierra cuando termina su último cuadro.
+    function descartarCamaraTarjeta() {
+      if (!mindar) return;
+      const c = mindar.controller;
+      pausarProceso();
+      const fin = loopTerminado; loopTerminado = null;
+      if (c) {
+        c.__descartado = true;
+        (fin || Promise.resolve()).then(() => { try { c.worker && c.worker.terminate(); } catch (_) {} });
+      }
+      if (videoTarjetaVivo()) mindar.stop();
+    }
+    function reiniciarCamaraTarjeta() {
+      if (reiniciando || entrando) return reiniciando;
+      reiniciando = (async () => {
+        try {
+          descartarCamaraTarjeta();
+          if (vista === 'tarjeta') { await arrancarMindar(); actualizarVisibilidad(); }
+        } catch (e) {
+          console.warn('Tarjeta AR:', e);
+          avisar('No pudimos reiniciar la cámara. Te mostramos el auto en 3D.');
+          verSinTarjeta();
+        } finally { reiniciando = null; }
+      })();
+      return reiniciando;
+    }
+    // Al entrar o salir de pantalla completa la pantalla cambia de tamaño: se reacomoda la cámara 3D.
+    ['fullscreenchange', 'webkitfullscreenchange', 'orientationchange'].forEach(ev => addEventListener(ev, () => {
+      if (!mindar || !videoTarjetaVivo()) return;
+      dosCuadros(() => mindar.resize());
+      setTimeout(() => mindar && videoTarjetaVivo() && mindar.resize(), 400);
+    }));
+
     async function reanudarProceso() {
       if (!mindar || procesando || !videoTarjetaVivo()) return;
       if (loopTerminado) { await loopTerminado; loopTerminado = null; }
       if (vista !== 'tarjeta' || procesando || !videoTarjetaVivo()) return;
       mindar.anchors.forEach(a => { a.visible = false; a.group.visible = false; });
+      soltarAncla();
       procesando = true;
       vigilarControlador();
       mindar.controller.processVideo(mindar.video);
@@ -1126,15 +1324,12 @@
       procesando = false;
       mindar.renderer.setAnimationLoop(null);
       mindar.anchors.forEach(a => { a.visible = false; a.group.visible = false; });
+      soltarAncla();
       encontrado = false;
       clearTimeout(tPerdido);
       body.classList.remove('auto-visible');
     }
-    function detenerTarjeta() {
-      if (!mindar) return;
-      pausarProceso();
-      if (videoTarjetaVivo()) mindar.stop();
-    }
+    function detenerTarjeta() { descartarCamaraTarjeta(); }
 
     function entrarTarjeta() {
       body.classList.remove('en-ar');
@@ -1148,6 +1343,8 @@
         try {
           await prepararTarjeta();
           if (auto && !modeloListo) mostrarModelo3D();
+          if (reiniciando) await reiniciando;
+          if (videoTarjetaVivo() && !videoCoincide()) descartarCamaraTarjeta();   // se giró el celular en otra pantalla
           if (videoTarjetaVivo()) await reanudarProceso(); else await arrancarMindar();
           if (vista !== 'tarjeta') pausarProceso();
           actualizarVisibilidad();
@@ -1329,7 +1526,10 @@
     // ---------- Para pruebas: ?debug expone el estado en la consola ----------
     if (params.has('debug')) window.KM48_DEBUG = {
       get mindar() { return mindar; }, get vista() { return vista; }, get encontrado() { return encontrado; },
-      get giro() { return giro; }, get escalador() { return escalador; }, get id() { return id; }
+      get giro() { return giro; }, get escalador() { return escalador; }, get id() { return id; },
+      get seguidor() { return seguidor; }, get ancla() { return anclaActiva; }, get poseLista() { return poseLista; },
+      get lectorQR() { return trabajadorQR ? 'segundo plano' : window.jsQR ? 'en la página' : 'no'; },
+      get modeloListo() { return modeloListo; }, poner: n => ponerAuto(idDe(n))
     };
 
     // ---------- Inicio ----------
